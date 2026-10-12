@@ -98,14 +98,67 @@
     #hero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
     #hero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; transform: translate(4%, 4%); }
     #hero.is-car .car { display: block; }
-    #hero.is-sheep .frame-a { display: block; }
+    #hero.is-sheep .sheep.frame-a { display: block; }
     /* two-frame trot when the sheep is moving */
-    #hero.is-sheep.moving .frame-a { animation: frameA var(--step, 0.3s) steps(1) infinite; }
-    #hero.is-sheep.moving .frame-b { display: block; animation: frameB var(--step, 0.3s) steps(1) infinite; }
+    #hero.is-sheep.moving .sheep.frame-a { animation: frameA var(--step, 0.3s) steps(1) infinite; }
+    #hero.is-sheep.moving .sheep.frame-b { display: block; animation: frameB var(--step, 0.3s) steps(1) infinite; }
     @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
     @keyframes frameB { 0% { opacity: 0; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4%); } }
     #hero.is-car.moving .car { animation: rumble 0.1s steps(1) infinite; }
     @keyframes rumble { 0% { transform: translateY(0); } 50% { transform: translateY(1.5%); } }
+
+    #hero.in-photo { opacity: 0; }
+    /* the pterodactyl flaps all the time, with a small faint shadow far below it */
+    #hero.is-ptero .shadow { left: 34%; right: 34%; top: 34%; bottom: 34%; background: rgba(0,0,0,0.13); transform: scale(1.4); }
+    #hero.is-ptero .ptero.frame-a { display: block; animation: flapA 0.36s steps(1) infinite; }
+    #hero.is-ptero .ptero.frame-b { display: block; animation: flapB 0.36s steps(1) infinite; }
+    @keyframes flapA { 0% { opacity: 1; } 50% { opacity: 0; } }
+    @keyframes flapB { 0% { opacity: 0; } 50% { opacity: 1; } }
+    .seg button { font-size: 0.72rem; }
+
+    /* ---------- inside a photo ---------- */
+    #scene {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.8rem;
+      background: rgba(255, 255, 255, 0.9);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    #scene.open { opacity: 1; pointer-events: auto; }
+    #scene.touch { justify-content: flex-start; padding-top: 90px; }
+    #scene.touch #sceneHint { display: none; }
+    #sceneFrame {
+      position: relative;
+      --th: 220px;
+      transform: scale(0.92);
+      transition: transform 0.3s;
+    }
+    #scene.open #sceneFrame { transform: scale(1); }
+    #sceneImg { display: block; object-fit: cover; }
+    #portal, #sceneHero {
+      position: absolute;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    #sceneHero svg { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+    #sceneHero .shadow { position: absolute; border-radius: 50%; background: rgba(0,0,0,0.25); }
+    #sceneHero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
+    #sceneHero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; }
+    #sceneHero.is-car .car, #sceneHero.is-sheep .sheep.frame-a { display: block; }
+    #sceneHero.is-sheep.moving .sheep.frame-a { animation: frameA var(--step, 0.3s) steps(1) infinite; }
+    #sceneHero.is-sheep.moving .sheep.frame-b { display: block; animation: frameB var(--step, 0.3s) steps(1) infinite; }
+    #sceneHint {
+      font-family: system-ui, sans-serif;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
 
     /* ---------- settings ---------- */
     #gear {
@@ -178,7 +231,7 @@
       left: 50%; bottom: 1rem;
       transform: translateX(-50%);
       gap: 0.5rem;
-      z-index: 60;
+      z-index: 400;            /* stays usable while you're inside a photo */
     }
     #dpad button {
       width: 2.8rem; height: 2.8rem;
@@ -206,13 +259,25 @@
       top: 50%;
       will-change: transform, opacity;
     }
+    /* 8-bit picture frame: dark outline with notched pixel corners, then a bevelled gold ring */
+    .tile, .pixel-frame {
+      --bp: max(2px, calc(var(--th) * 0.055));
+      background: #2b2420;
+      padding: var(--bp);
+      clip-path: polygon(var(--bp) 0, calc(100% - var(--bp)) 0, 100% var(--bp), 100% calc(100% - var(--bp)),
+                         calc(100% - var(--bp)) 100%, var(--bp) 100%, 0 calc(100% - var(--bp)), 0 var(--bp));
+    }
+    .tile img, .tile canvas, .pixel-frame > img {
+      box-sizing: border-box;
+      border: var(--bp) solid;
+      border-color: #f2cf78 #a8792f #a8792f #f2cf78;
+      background: var(--placeholder);
+    }
     .tile {
       width: var(--tw);
       height: var(--th);
       margin-left: calc(var(--tw) / -2);
       margin-top: calc(var(--th) / -2);
-      background: var(--placeholder);
-      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     }
     .glow {
       width: var(--gw);
@@ -236,7 +301,7 @@
     .tile.pixel canvas { display: block; }
     .tile.pixel img { display: none; }
     .tile.back, .tile.empty, .tile.inactive { pointer-events: none; }
-    .tile.empty { box-shadow: none; background: #e6e6e6; }
+    .tile.empty { background: #bdbdbd; }
     .tile:not(.back):not(.inactive):hover img, .tile:not(.back):not(.inactive):hover canvas { filter: brightness(1.08); }
     /* progress bar that fills while hovering */
     .tile::after {
@@ -446,7 +511,7 @@
       <h1>Sean O'Dono</h1>
       <div id="planet-name"></div>
       <div id="planet-sub"></div>
-      <div class="hint"><b>W A S D</b> to move &middot; <b>C</b> to switch sheep / car &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
+      <div class="hint"><b>W A S D</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
     </div>
 
     <!-- the character: an 8-bit sheep or car (drawn by the script below) -->
@@ -468,6 +533,7 @@
         <div class="seg">
           <button data-char="sheep">Sheep</button>
           <button data-char="car">Car</button>
+          <button data-char="ptero">Pterodactyl</button>
         </div>
       </div>
       <div class="set-row">
@@ -486,6 +552,10 @@
         <input id="speedInput" type="range" min="0" max="1000" step="1">
       </label>
       <label class="set-row">
+        <span class="set-label">Character size <output id="charOut"></output></span>
+        <input id="charInput" type="range" min="0" max="1000" step="1">
+      </label>
+      <label class="set-row">
         <span class="set-label">Photo pixels <output id="pixOut"></output></span>
         <input id="pixInput" type="range" min="0" max="12" step="1">
       </label>
@@ -494,6 +564,16 @@
     <button class="arrow" id="prevPlanet" aria-label="Previous planet">&#8249;</button>
     <button class="arrow" id="nextPlanet" aria-label="Next planet">&#8250;</button>
   </section>
+
+  <!-- inside a photo -->
+  <div id="scene" aria-hidden="true">
+    <div id="sceneFrame" class="pixel-frame">
+      <img id="sceneImg" alt="">
+      <canvas id="portal" width="16" height="16"></canvas>
+      <div id="sceneHero"></div>
+    </div>
+    <div id="sceneHint"><b>W A S D</b> to walk around &middot; walk off the photo or into the portal to leave</div>
+  </div>
 
   <div id="magnifier">
     <img src="" alt="">
@@ -592,13 +672,17 @@
     const PHOTO_GAP = 0.42;         // distance between photos along a trail (bigger = more spread out, fewer photos)
     const PHOTO_SIZE = 0.16;        // size of each photo, compared to the planet
     const PATH_WIDTH = 0.05;        // width of the main trails, compared to the planet
+    const TRAIL_LOOSENESS = 3;      // how far the sheep / car can stray from a trail, in trail widths
+                                    // (1 = right on the trail, 3 = loose, 6 = very loose, 100 = go anywhere)
 
     // Starting values. Visitors can change these with the gear button on the page.
-    const CHARACTER = "sheep";      // "sheep" or "car"
+    const CHARACTER = "sheep";      // "sheep", "car" or "ptero" (pterodactyl)
     const PLANET_SIZE = 1;          // size of the main planet (1.2 = 20% bigger, up to 10)
     const SPEED = 1;                // how fast the character moves (2 = twice as fast, up to 10)
     const PHOTO_PIXELS = 32;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
-    const GROUND = "clear";         // "clear" (see-through planet) or "grass" (solid 8-bit grassy planet)
+    const GROUND = "grass";         // "grass" (solid 8-bit grassy planet) or "clear" (see-through planet)
+    const CHARACTER_SIZE = 1;       // size of the sheep / car / pterodactyl (2 = twice as big)
+    const FLYING_ZOOM = 0.8;        // the world shrinks to this size while you fly the pterodactyl (1 = no change)
 
     // ================= You don't need to edit below =================
     // Always open at the top (the planets), even if the link has #about etc. or the browser remembers a scroll spot
@@ -645,6 +729,7 @@
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let radius = 250;          // main planet radius in pixels
     let baseRadius = 250;      // main planet radius before the size setting is applied
+    let zoom = 1;              // shrinks smoothly to FLYING_ZOOM while flying the pterodactyl
     let slots = [];            // slot 0 = the main spot, the rest = small planet spots
     let focused = 0;           // which planet is in the main spot
     let transition = null;
@@ -788,6 +873,19 @@
         ...spurs.map(pts => ({ pts, w: 0.6 })),
         ...mains.map(pts => ({ pts, w: 1 }))
       ];
+      world.spurs = spurs;
+      // every trail point in one list, plus extra points between them, for the "stay on the trail" check
+      const flat = [];
+      for (const path of world.paths) {
+        for (let i = 0; i < path.pts.length; i++) {
+          const a = path.pts[i];
+          flat.push(a[0], a[1], a[2]);
+          const b = path.pts[i + 1];
+          if (b) { const m = norm([a[0] + b[0], a[1] + b[1], a[2] + b[2]]); flat.push(m[0], m[1], m[2]); }
+        }
+      }
+      world.trailPts = new Float32Array(flat);
+      world.startPoint = mains[0][0];
       return photos;
     }
 
@@ -815,6 +913,10 @@
         dirty: true
       };
       buildTiles(world, buildLayout(world, data.photos.length));
+      // start each planet with a trail under the character
+      const c = mulMV(world.rot, world.startPoint);
+      const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
+      if (l > 1e-6) world.rot = mulMM(axisAngle([ax[0] / l, ax[1] / l, ax[2] / l], Math.atan2(l, c[2])), world.rot);
       return world;
     });
 
@@ -835,6 +937,7 @@
           el.appendChild(pix);
           tile.img = img;
           tile.pix = pix;
+          tile.entry = world.spurs && world.spurs[i] ? world.spurs[i][2] : null;   // where you come back out
           tile.photo = photo;
           attachHover(tile);
           pixelTiles.push(tile);
@@ -1133,7 +1236,7 @@
 
     function goToPlanet(i) {
       i = (i + worlds.length) % worlds.length;
-      if (i === focused || transition) return;
+      if (i === focused || transition || scene) return;
       cancelHover();
       closeMagnifier();
       hero.speed = 0;
@@ -1218,7 +1321,7 @@
         const column = Math.min(300, w * 0.24);
         const top = 50, bottom = 20;
         baseRadius = Math.min((w - column) * 0.38, (h - top - bottom) / 2.3);
-        radius = baseRadius * settings.size;
+        radius = baseRadius * settings.size * zoom;
         const mini = Math.min(0.3 * baseRadius, (h - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
         slots.push({ x: (w - column) / 2 - w / 2 + 30, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
         for (let k = 0; k < minis; k++) {
@@ -1228,7 +1331,7 @@
         // phones: main planet in the middle, small planets in a row at the bottom
         const top = 165, bottom = 150;
         baseRadius = Math.min(w * 0.37, (h - top - bottom) / 2.3);
-        radius = baseRadius * settings.size;
+        radius = baseRadius * settings.size * zoom;
         const mini = Math.min(0.3 * baseRadius, w / minis * 0.62 / 2.3) / radius;
         slots.push({ x: 0, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
         for (let k = 0; k < minis; k++) {
@@ -1258,6 +1361,7 @@
     const heroEl = document.getElementById("hero");
     const hero = { heading: 0, moveDir: 0, speed: 0, face: 1 };
     const keys = {};
+    const CHARACTERS = ["sheep", "car", "ptero"];
 
     // ---------- 8-bit sprites, drawn from little pixel maps ----------
     const SHEEP_BODY = [
@@ -1294,6 +1398,39 @@
       "...RRRRRR..."
     ];
     const CAR_COLORS = { R: "#e0443a", r: "#b4342b", Y: "#ffe45c", B: "#92d6f7", T: "#1d1d1d", L: "#8a1010" };
+    const PTERO_UP = [
+      ".........YY.........",
+      ".........YY.........",
+      "........BBBB........",
+      ".......BKBBKB.......",
+      "........BBBB........",
+      "........cBBc........",
+      "...wwwwwBBBBwwwww...",
+      ".wWWWWWWBBBBWWWWWWw.",
+      "wWWWWWWWBBBBWWWWWWWw",
+      ".wWWWWWWBBBBWWWWWWw.",
+      "...wWWWWWBBWWWWWw...",
+      ".....wwWWBBWWww.....",
+      ".........BB.........",
+      "........b..b........"
+    ];
+    const PTERO_DOWN = [
+      ".........YY.........",
+      ".........YY.........",
+      "........BBBB........",
+      ".......BKBBKB.......",
+      "........BBBB........",
+      "........cBBc........",
+      "......wwBBBBww......",
+      "....wWWWBBBBWWWw....",
+      "...wWWWWBBBBWWWWw...",
+      "....wWWWBBBBWWWw....",
+      "......wWWBBWWw......",
+      "........wBBw........",
+      ".........BB.........",
+      "........b..b........"
+    ];
+    const PTERO_COLORS = { B: "#b8632b", c: "#8a3f17", W: "#e3a463", w: "#9a5424", Y: "#efcf7a", K: "#1d1d1d", b: "#5a3418" };
 
     function pixelArt(rows, colors, cls) {
       // add a one-pixel dark outline so the sprite stands out on any photo
@@ -1305,9 +1442,7 @@
         let x = 0;
         while (x < W) {
           let c = at(x, y);
-          if (c === ".") {
-            if (needsOutline(x, y)) c = "#";
-          }
+          if (c === "." && needsOutline(x, y)) c = "#";
           if (c === ".") { x++; continue; }
           let run = 1;
           while (x + run < W) {
@@ -1322,38 +1457,50 @@
       }
       return `<svg class="${cls}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges">${rects}</svg>`;
     }
-    heroEl.innerHTML =
+    const SPRITES =
       '<div class="shadow"></div>' +
       pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_A], SHEEP_COLORS, "sheep frame-a") +
       pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_B], SHEEP_COLORS, "sheep frame-b") +
-      pixelArt(CAR, CAR_COLORS, "car");
+      pixelArt(CAR, CAR_COLORS, "car") +
+      pixelArt(PTERO_UP, PTERO_COLORS, "ptero frame-a") +
+      pixelArt(PTERO_DOWN, PTERO_COLORS, "ptero frame-b");
+    heroEl.innerHTML = SPRITES;
+
+    function heroSize() {
+      return baseRadius * (settings.character === "ptero" ? 0.36 : 0.3) * Math.min(1, settings.size) * settings.charSize;
+    }
 
     function placeHero() {
       const sl = slots[0];
       const k = persp / (persp - radius);             // the front of the planet is a little closer to you
-      const size = baseRadius * 0.3 * Math.min(1, settings.size) * k;
+      const size = heroSize() * k;
       heroEl.style.width = heroEl.style.height = size + "px";
       heroEl.style.left = (stage.clientWidth / 2 + sl.x * k - size / 2) + "px";
       heroEl.style.top = (stage.clientHeight / 2 + sl.y * k - size / 2) + "px";
-      styleHero();
+      styleHero(heroEl);
     }
 
-    function styleHero() {
-      if (settings.character === "car") {
-        const snap = Math.round(hero.heading / (Math.PI / 4)) * (Math.PI / 4);   // 8 directions, like an old game
-        heroEl.style.transform = `rotate(${snap}rad)`;
+    // how the sprite is turned: the car and pterodactyl point in 8 directions, the sheep faces left or right
+    function styleHero(el) {
+      if (settings.character === "car" || settings.character === "ptero") {
+        const snap = Math.round(hero.heading / (Math.PI / 4)) * (Math.PI / 4);
+        el.style.transform = `rotate(${snap}rad)`;
       } else {
-        heroEl.style.transform = `scaleX(${hero.face})`;   // the sheep just faces left or right
+        el.style.transform = `scaleX(${hero.face})`;
       }
+    }
+    function lookFor(el) {
+      CHARACTERS.forEach(c => el.classList.toggle("is-" + c, settings.character === c));
     }
 
     function setCharacter(kind) {
-      settings.character = kind === "car" ? "car" : "sheep";
-      heroEl.classList.toggle("is-car", settings.character === "car");
-      heroEl.classList.toggle("is-sheep", settings.character !== "car");
+      settings.character = CHARACTERS.includes(kind) ? kind : "sheep";
+      lookFor(heroEl);
+      lookFor(sceneHero);
       document.querySelectorAll("[data-char]").forEach(b => b.classList.toggle("on", b.dataset.char === settings.character));
       saveSettings();
       placeHero();
+      if (scene && settings.character === "ptero") leaveScene();   // the pterodactyl can't go inside photos
     }
 
     // turn smoothly from one angle toward another, the short way round
@@ -1362,53 +1509,211 @@
       return a + Math.max(-maxStep, Math.min(maxStep, d));
     }
 
-    // W A S D move up, left, down and right on the screen
-    function drive(dt) {
+    // W A S D move up, left, down and right on the screen. Works the same on the planet and inside a photo.
+    function steer(dt, top) {
       const ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
       const iy = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0);
       const pressing = ix !== 0 || iy !== 0;
-      const car = settings.character === "car";
-      // same pace across the screen whatever the planet size
-      const top = (car ? 1.15 : 0.55) * settings.speed / settings.size;
       const want = pressing ? Math.atan2(ix, -iy) : hero.heading;
-
-      if (car) {
+      if (settings.character === "car") {
         // the car turns toward the direction you press and speeds up / slows down gradually
         hero.heading = turnToward(hero.heading, want, 5 * dt);
-        const target = pressing ? top : 0;
-        const change = target - hero.speed;
+        const change = (pressing ? top : 0) - hero.speed;
         hero.speed += Math.max(-2.6 * top * dt, Math.min(1.8 * top * dt, change));
         hero.moveDir = hero.heading;
       } else {
-        // the sheep trots straight in the direction you press
-        if (pressing) { hero.heading = want; hero.moveDir = want; }
+        // the sheep trots and the pterodactyl flies straight in the direction you press
+        if (pressing) {
+          hero.moveDir = want;
+          // the sheep just faces left/right; the pterodactyl swings round to face where it's going
+          hero.heading = settings.character === "ptero" ? turnToward(hero.heading, want, 12 * dt) : want;
+        }
         if (ix) hero.face = ix > 0 ? 1 : -1;
         hero.speed += ((pressing ? top : 0) - hero.speed) * Math.min(1, dt * 14);
       }
-      if (hero.speed < 0.002 && !pressing) hero.speed = 0;
+      if (hero.speed < top * 0.004 && !pressing) hero.speed = 0;
+    }
 
+    function showMotion(el, moving) {
+      el.classList.toggle("moving", moving);
+      el.style.setProperty("--step", Math.max(0.12, 0.32 / Math.max(0.6, settings.speed)) + "s");
+      styleHero(el);
+    }
+
+    // ---------- staying on the trails ----------
+    // The sheep and car must stay roughly on a trail (they can drift a little either side).
+    // If a step would take them too far off, they try slightly different angles so they
+    // slide round the bends. The pterodactyl can fly anywhere.
+    const TRAIL_SLACK = Math.cos(Math.min(Math.PI, PATH_WIDTH * TRAIL_LOOSENESS));
+    function trailCloseness(world, p) {
+      const T = world.trailPts;
+      let best = -2;
+      for (let i = 0; i < T.length; i += 3) {
+        const d = T[i] * p[0] + T[i + 1] * p[1] + T[i + 2] * p[2];
+        if (d > best) best = d;
+      }
+      return best;
+    }
+    function tryMove(world, dir, dist) {
+      const free = settings.character === "ptero";
+      const now = free ? 1 : trailCloseness(world, world.rot[2]);
+      const tries = free ? [0] : [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4];
+      for (const off of tries) {
+        const a = dir + off;
+        const R2 = mulMM(axisAngle([-Math.cos(a), -Math.sin(a), 0], dist * Math.cos(off)), world.rot);
+        if (!free) {
+          const near = trailCloseness(world, R2[2]);
+          if (near < TRAIL_SLACK && near <= now + 1e-7) continue;
+        }
+        world.rot = R2;
+        world.dirty = true;
+        return off;
+      }
+      return null;
+    }
+    // turn the planet so a spot on it is right under the character
+    function bringToFront(world, q) {
+      const c = mulMV(world.rot, q);
+      const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
+      if (l < 1e-6) return;
+      world.rot = mulMM(axisAngle([ax[0] / l, ax[1] / l, ax[2] / l], Math.atan2(l, c[2])), world.rot);
+      world.dirty = true;
+    }
+
+    // ---------- moving on the planet ----------
+    const ENTER_RADIUS = Math.cos(PHOTO_SIZE * 0.42);
+    const LEAVE_RADIUS = Math.cos(PHOTO_SIZE * 0.75);
+    let cooldownTile = null;              // the photo you just came out of (so you don't fall straight back in)
+
+    function drive(dt) {
+      const world = worlds[focused];
+      const top = (settings.character === "car" ? 1.15 : settings.character === "ptero" ? 0.85 : 0.55) * settings.speed / (settings.size * zoom);
+      steer(dt, top);
       if (hero.speed > 0) {
-        // the ground slides the opposite way to where the character is going
-        roll(worlds[focused], -Math.sin(hero.moveDir), Math.cos(hero.moveDir), hero.speed * dt);
+        const off = tryMove(world, hero.moveDir, hero.speed * dt);
+        if (off === null) {
+          if (settings.character === "car") hero.speed *= 0.5;          // bumped off the trail
+        } else if (off && settings.character === "car") {
+          hero.heading = turnToward(hero.heading, hero.moveDir + off, 6 * dt);   // the car follows the bend
+        }
         if (magnified) closeMagnifier();
       }
-      const moving = hero.speed > 0.01;
-      heroEl.classList.toggle("moving", moving);
-      heroEl.style.setProperty("--step", Math.max(0.12, 0.32 / Math.max(0.6, settings.speed)) + "s");
-      styleHero();
+      showMotion(heroEl, hero.speed > top * 0.02 || settings.character === "ptero");
+
+      // walking up a side path into a photo (not for the pterodactyl)
+      const here = world.rot[2];
+      if (cooldownTile && dot(here, cooldownTile.p) < LEAVE_RADIUS) cooldownTile = null;
+      if (settings.character !== "ptero" && hero.speed > 0) {
+        for (const t of world.tiles) {
+          if (!t.photo || t === cooldownTile) continue;
+          if (dot(here, t.p) > ENTER_RADIUS) { enterScene(t); break; }
+        }
+      }
+    }
+
+    // ================= inside a photo =================
+    const sceneEl = document.getElementById("scene");
+    const sceneFrame = document.getElementById("sceneFrame");
+    const sceneImg = document.getElementById("sceneImg");
+    const sceneHero = document.getElementById("sceneHero");
+    const portalEl = document.getElementById("portal");
+    sceneHero.innerHTML = SPRITES;
+    let scene = null;
+
+    function enterScene(tile) {
+      cancelHover();
+      closeMagnifier();
+      const src = sourceFor(tile.photo.file).img;
+      const ratio = src.naturalWidth ? src.naturalWidth / src.naturalHeight : 1.5;
+      const touch = matchMedia("(hover: none) and (pointer: coarse)").matches;
+      const maxH = touch ? innerHeight - 330 : innerHeight * 0.76;      // leave room for the touch buttons
+      let W = Math.min(innerWidth * 0.86, 1400), H = W / ratio;
+      if (H > maxH) { H = maxH; W = H * ratio; }
+      sceneEl.classList.toggle("touch", touch);
+      sceneImg.src = tile.photo.file;
+      sceneImg.alt = tile.photo.caption || tile.world.data.name;
+      sceneImg.style.width = W + "px";
+      sceneImg.style.height = H + "px";
+      const size = Math.max(28, Math.min(W, H) * 0.14 * settings.charSize);
+      const portalSize = Math.max(34, size * 1.25);
+      sceneHero.style.width = sceneHero.style.height = size + "px";
+      portalEl.style.width = portalEl.style.height = portalSize + "px";
+      const px = W / 2, py = H - portalSize * 0.75;        // the portal sits at the bottom, where you came in
+      portalEl.style.left = (px - portalSize / 2) + "px";
+      portalEl.style.top = (py - portalSize / 2) + "px";
+      scene = { tile, W, H, x: W / 2, y: py - portalSize * 1.4, px, py, portalR: portalSize * 0.42, armed: false, size };
+      hero.speed = 0;
+      lookFor(sceneHero);
+      placeSceneHero();
+      heroEl.classList.add("in-photo");
+      sceneEl.classList.add("open");
+    }
+
+    function placeSceneHero() {
+      sceneHero.style.left = (scene.x - scene.size / 2) + "px";
+      sceneHero.style.top = (scene.y - scene.size / 2) + "px";
+    }
+
+    function leaveScene() {
+      if (!scene) return;
+      const tile = scene.tile, world = tile.world;
+      scene = null;
+      sceneEl.classList.remove("open");
+      heroEl.classList.remove("in-photo");
+      hero.speed = 0;
+      // come back out at the photo's entrance on its side path
+      if (tile.entry) bringToFront(world, tile.entry);
+      cooldownTile = tile;
+    }
+
+    function sceneTick(dt, now) {
+      const top = scene.W * (settings.character === "car" ? 0.55 : 0.32) * Math.min(3, settings.speed);
+      steer(dt, top);
+      scene.x += Math.sin(hero.moveDir) * hero.speed * dt;
+      scene.y -= Math.cos(hero.moveDir) * hero.speed * dt;
+      placeSceneHero();
+      showMotion(sceneHero, hero.speed > top * 0.02);
+      drawPortal(now);
+      const d = Math.hypot(scene.x - scene.px, scene.y - scene.py);
+      if (d > scene.portalR * 2) scene.armed = true;         // the portal works once you've stepped away from it
+      const off = scene.x < 0 || scene.y < 0 || scene.x > scene.W || scene.y > scene.H;
+      if (off || (scene.armed && d < scene.portalR)) leaveScene();
+    }
+
+    // a swirling 8-bit portal, redrawn every frame on a 16 x 16 pixel canvas
+    const portalCtx = portalEl.getContext("2d");
+    const portalImg = portalCtx.createImageData(16, 16);
+    const PORTAL_COLORS = [[42, 13, 77], [107, 47, 191], [176, 108, 240], [240, 216, 255]];
+    function drawPortal(now) {
+      const d = portalImg.data, t = now / 1000;
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        const o = (y * 16 + x) * 4, dx = x - 7.5, dy = y - 7.5, r = Math.hypot(dx, dy);
+        if (r > 7.9) { d[o + 3] = 0; continue; }
+        let c;
+        if (r > 6.9) c = [26, 8, 51];
+        else if (r < 1.3) c = [255, 255, 255];
+        else {
+          const v = Math.atan2(dy, dx) / (Math.PI * 2) * 3 + r * 0.32 - t * 1.6;
+          c = PORTAL_COLORS[Math.floor(((v % 1) + 1) % 1 * 4)];
+        }
+        d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+      }
+      portalCtx.putImageData(portalImg, 0, 0);
     }
 
     const typing = e => e.target.closest && e.target.closest("input, textarea, select");
     document.addEventListener("keydown", e => {
       if (typing(e) || e.metaKey || e.ctrlKey) return;
+      const onPlanets = scene || window.scrollY < window.innerHeight * 0.6;
       if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
-        if (window.scrollY > window.innerHeight * 0.6) return;   // only on the planets screen
+        if (!onPlanets) return;
         keys[e.code] = true;
         e.preventDefault();
       }
-      if (e.code === "KeyC" && window.scrollY < window.innerHeight * 0.6) {
-        setCharacter(settings.character === "car" ? "sheep" : "car");
+      if (e.code === "KeyC" && onPlanets) {
+        setCharacter(CHARACTERS[(CHARACTERS.indexOf(settings.character) + 1) % CHARACTERS.length]);
       }
+      if (e.code === "Escape" && scene) leaveScene();
     });
     document.addEventListener("keyup", e => { keys[e.code] = false; });
     window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
@@ -1426,12 +1731,14 @@
     });
 
     // ================= settings panel =================
-    const settings = { character: CHARACTER === "car" ? "car" : "sheep", size: PLANET_SIZE, speed: SPEED, ground: GROUND === "grass" ? "grass" : "clear",
+    const settings = { character: ["sheep", "car", "ptero"].includes(CHARACTER) ? CHARACTER : "sheep", charSize: CHARACTER_SIZE, size: PLANET_SIZE, speed: SPEED, ground: GROUND === "grass" ? "grass" : "clear",
                        pixels: PIXEL_STEPS.includes(PHOTO_PIXELS) ? PHOTO_PIXELS : 32 };
-    const SIZE_RANGE = [0.5, 10], SPEED_RANGE = [0.25, 10];
+    const SIZE_RANGE = [0.5, 10], SPEED_RANGE = [0.25, 10], CHAR_RANGE = [0.5, 3];
     try {
       const saved = JSON.parse(localStorage.getItem("planetSettings") || "{}");
-      if (saved.character === "car" || saved.character === "sheep") settings.character = saved.character;
+      if (saved.character === "bird") saved.character = "ptero";             // older saved setting
+      if (["sheep", "car", "ptero"].includes(saved.character)) settings.character = saved.character;
+      if (saved.charSize >= CHAR_RANGE[0] && saved.charSize <= CHAR_RANGE[1]) settings.charSize = saved.charSize;
       if (saved.size >= SIZE_RANGE[0] && saved.size <= SIZE_RANGE[1]) settings.size = saved.size;
       if (saved.speed >= SPEED_RANGE[0] && saved.speed <= SPEED_RANGE[1]) settings.speed = saved.speed;
       if (saved.ground === "grass" || saved.ground === "clear") settings.ground = saved.ground;
@@ -1468,6 +1775,16 @@
       speedOut.textContent = settings.speed + "\u00d7";
       saveSettings();
     });
+    const charInput = document.getElementById("charInput"), charOut = document.getElementById("charOut");
+    const showCharSize = () => {
+      charInput.value = toSlider(settings.charSize, CHAR_RANGE);
+      charOut.textContent = settings.charSize + "\u00d7";
+    };
+    charInput.addEventListener("input", () => {
+      settings.charSize = nice(fromSlider(+charInput.value, CHAR_RANGE));
+      showCharSize(); saveSettings(); placeHero();
+    });
+    showCharSize();
     const pixInput = document.getElementById("pixInput"), pixOut = document.getElementById("pixOut");
     const showPixels = () => {
       pixInput.value = PIXEL_STEPS.indexOf(settings.pixels);
@@ -1491,7 +1808,8 @@
       setGround(GROUND);
       settings.size = PLANET_SIZE; settings.speed = SPEED;
       settings.pixels = PIXEL_STEPS.includes(PHOTO_PIXELS) ? PHOTO_PIXELS : 32;
-      showPixels(); pixelateAll();
+      settings.charSize = CHARACTER_SIZE;
+      showPixels(); pixelateAll(); showCharSize();
       showSettings(); saveSettings(); setCharacter(CHARACTER);
       if (!transition) layout();
     });
@@ -1500,7 +1818,7 @@
     document.getElementById("prevPlanet").addEventListener("click", () => goToPlanet(focused - 1));
     document.getElementById("nextPlanet").addEventListener("click", () => goToPlanet(focused + 1));
     document.addEventListener("keydown", e => {
-      if (document.getElementById("lightbox").classList.contains("open")) return;
+      if (document.getElementById("lightbox").classList.contains("open") || scene) return;
       if (window.scrollY > window.innerHeight / 2) return;
       if (e.key === "ArrowLeft") goToPlanet(focused - 1);
       if (e.key === "ArrowRight") goToPlanet(focused + 1);
@@ -1552,7 +1870,7 @@
 
     function attachHover(tile) {
       tile.el.addEventListener("pointerenter", e => {
-        if (magnified || transition || tile.el.classList.contains("back")) return;
+        if (magnified || transition || scene || tile.el.classList.contains("back")) return;
         if (tile.world.idx !== focused) return;
         cancelHover();
         hoverTile = tile;
@@ -1624,8 +1942,17 @@
     function tick(now) {
       const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
+      // glide the world size toward the flying / walking size
+      const zoomTarget = settings.character === "ptero" ? FLYING_ZOOM : 1;
+      if (Math.abs(zoom - zoomTarget) > 0.001 && !transition) {
+        zoom += (zoomTarget - zoom) * Math.min(1, dt * 4);
+        if (Math.abs(zoom - zoomTarget) <= 0.001) zoom = zoomTarget;
+        layout();
+      }
       if (transition) {
         drawTransition(now);
+      } else if (scene) {
+        sceneTick(dt, now);
       } else {
         drive(dt);
         if (++frame % 120 === 0) worlds[focused].rot = orthonormalize(worlds[focused].rot);
