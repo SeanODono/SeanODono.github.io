@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sean O'Dono Photography</title>
-  <meta name="description" content="Landscape and wildlife photography">
+  <meta name="description" content="Landscape, wildlife and travel photography">
   <style>
     :root {
       --bg: #ffffff;
@@ -28,7 +28,7 @@
       top: 0; left: 0; right: 0;
       display: flex;
       justify-content: center;
-      gap: 1.5rem;
+      gap: 1.4rem;
       flex-wrap: wrap;
       padding: 0.9rem 1rem;
       background: linear-gradient(rgba(255,255,255,0.95), rgba(255,255,255,0));
@@ -38,29 +38,55 @@
       color: var(--text);
       text-decoration: none;
       font-family: system-ui, sans-serif;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
     nav a:hover { color: var(--accent); }
 
-    /* ---------- Home: photo sphere ---------- */
+    /* ---------- Home: planets ---------- */
     #home {
       position: relative;
       height: 100vh;
       height: 100svh;
+      min-height: 520px;
       overflow: hidden;
     }
     #stage {
       position: absolute;
       inset: 0;
-      perspective-origin: 50% 50%;
       cursor: grab;
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
     }
     #stage.grabbing { cursor: grabbing; }
+
+    .planet {
+      position: absolute;
+      left: 0; top: 0;
+      width: var(--box);
+      height: var(--box);
+      border-radius: 50%;
+      transform-origin: 50% 50%;
+      perspective-origin: 50% 50%;
+      transition: transform 0.9s cubic-bezier(0.65, 0.05, 0.3, 1), opacity 0.6s ease;
+    }
+    /* soft colored glow behind each planet */
+    .planet::before {
+      content: "";
+      position: absolute;
+      inset: 12%;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--glow) 0%, transparent 68%);
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .planet.focused { z-index: 2; }
+    .planet.mini { z-index: 1; cursor: pointer; opacity: 0.9; }
+    .planet.mini:hover { opacity: 1; }
+    .planet.mini .tile { pointer-events: none; }
+
     .tile {
       position: absolute;
       left: 50%;
@@ -70,6 +96,8 @@
       margin-left: calc(var(--tw) / -2);
       margin-top: calc(var(--th) / -2);
       will-change: transform, opacity;
+      background: var(--placeholder);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     }
     .tile img {
       width: 100%;
@@ -77,13 +105,12 @@
       object-fit: cover;
       display: block;
       pointer-events: none;
-      background: var(--placeholder);
-      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
       transition: filter 0.2s;
     }
-    .tile.back { pointer-events: none; }
+    .tile.back, .tile.empty { pointer-events: none; }
+    .tile.empty { box-shadow: none; background: #e6e6e6; }
     .tile:not(.back):hover img { filter: brightness(1.08); }
-    /* progress bar that fills during the 1.5s hover */
+    /* progress bar that fills while hovering */
     .tile::after {
       content: "";
       position: absolute;
@@ -97,11 +124,29 @@
       transition: width var(--hover-delay, 0.5s) linear;
     }
 
+    .planet-label {
+      position: absolute;
+      transform: translateX(-50%);
+      background: none;
+      border: none;
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+      padding: 0.3rem 0.6rem;
+      z-index: 6;
+      transition: left 0.9s cubic-bezier(0.65, 0.05, 0.3, 1), top 0.9s cubic-bezier(0.65, 0.05, 0.3, 1), opacity 0.4s;
+    }
+    .planet-label:hover { color: var(--accent); }
+    .planet-label.hidden { opacity: 0; pointer-events: none; }
+
     .home-title {
       position: absolute;
-      top: 3.6rem;
-      left: 0; right: 0;
-      text-align: center;
+      top: 3.4rem;
+      left: 1.5rem;
       pointer-events: none;
       z-index: 5;
     }
@@ -109,27 +154,36 @@
       font-weight: normal;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      font-size: clamp(1.3rem, 4vw, 2.2rem);
+      font-size: clamp(1.1rem, 3vw, 1.7rem);
     }
-    .home-title p { color: var(--muted); font-size: 0.95rem; }
+    #planet-name {
+      font-size: clamp(1.4rem, 4vw, 2.4rem);
+      line-height: 1.2;
+      margin-top: 0.3rem;
+    }
+    #planet-sub { color: var(--muted); font-size: 0.9rem; }
     .hint {
-      position: absolute;
-      bottom: 1.2rem;
-      left: 0; right: 0;
-      text-align: center;
       color: var(--muted);
       font-family: system-ui, sans-serif;
-      font-size: 0.8rem;
-      letter-spacing: 0.05em;
-      z-index: 5;
+      font-size: 0.75rem;
+      margin-top: 0.6rem;
+      max-width: 15rem;
     }
-    .hint a {
-      display: inline-block;
-      margin-top: 0.4rem;
-      color: var(--text);
-      text-decoration: none;
-      font-size: 1.3rem;
+
+    .arrow {
+      position: absolute;
+      top: 42%;
+      background: none;
+      border: none;
+      font-size: 2.6rem;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      z-index: 6;
     }
+    .arrow:hover { color: var(--text); }
+    #prevPlanet { left: 0.3rem; }
+    #nextPlanet { right: 0.3rem; }
 
     /* ---------- Magnified photo ---------- */
     #magnifier {
@@ -142,12 +196,7 @@
                   height 0.35s ease, opacity 0.25s ease;
     }
     #magnifier.open { opacity: 1; pointer-events: auto; }
-    #magnifier img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
+    #magnifier img { width: 100%; height: 100%; object-fit: cover; display: block; }
     #magnifier .caption {
       position: absolute;
       left: 0; right: 0; bottom: 0;
@@ -192,7 +241,7 @@
     }
     .videos iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; }
     #about p { max-width: 650px; color: #444; }
-    .empty { color: var(--muted); }
+    .empty-note { color: var(--muted); }
     footer {
       text-align: center;
       color: var(--muted);
@@ -227,32 +276,29 @@
     #prev { left: 0.5rem; }
     #next { right: 0.5rem; }
 
-    @media (max-width: 500px) {
+    @media (max-width: 600px) {
       .videos, .gallery { grid-template-columns: 1fr; }
-      nav { gap: 1rem; }
+      nav { gap: 0.4rem 0.9rem; font-size: 0.7rem; }
+      .home-title { left: 1rem; top: 4.8rem; }
+      .hint { display: none; }
+      .arrow { top: auto; bottom: 30%; font-size: 2rem; }
     }
   </style>
 </head>
 <body>
 
-  <nav>
-    <a href="#home">Home</a>
-    <a href="#landscape">Landscape</a>
-    <a href="#wildlife">Wildlife</a>
-    <a href="#video">Video</a>
-    <a href="#about">About</a>
-  </nav>
+  <nav id="nav"></nav>
 
   <section id="home">
     <div id="stage"></div>
     <div class="home-title">
       <h1>Sean O'Dono</h1>
-      <p>Landscape &amp; Wildlife Photography</p>
+      <div id="planet-name"></div>
+      <div id="planet-sub"></div>
+      <div class="hint">Drag to spin &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
     </div>
-    <div class="hint">
-      Drag to spin &middot; Hover a photo to enlarge<br>
-      <a href="#landscape" aria-label="Scroll to galleries">&#8964;</a>
-    </div>
+    <button class="arrow" id="prevPlanet" aria-label="Previous planet">&#8249;</button>
+    <button class="arrow" id="nextPlanet" aria-label="Next planet">&#8250;</button>
   </section>
 
   <div id="magnifier">
@@ -260,15 +306,7 @@
     <div class="caption"></div>
   </div>
 
-  <section class="content" id="landscape">
-    <h2>Landscape</h2>
-    <div class="gallery" data-category="landscape"></div>
-  </section>
-
-  <section class="content" id="wildlife">
-    <h2>Wildlife</h2>
-    <div class="gallery" data-category="wildlife"></div>
-  </section>
+  <div id="galleries"></div>
 
   <section class="content" id="video">
     <h2>Video</h2>
@@ -293,15 +331,50 @@
 
   <script>
     // ============================================================
-    //  EDIT THIS LIST to add your photos.
-    //  Put image files in the "images" folder next to this file.
-    //  Every photo here appears on the sphere AND in its gallery.
+    //  YOUR PLANETS. Each one has its own list of photos.
+    //  Put image files in the "images" folder next to this file,
+    //  then add a line like this to the right planet:
+    //     { file: "images/myphoto.jpg", caption: "" },
+    //  A planet with no photos shows as a blank gray planet.
+    //  "color" is the soft glow behind the planet.
     // ============================================================
-    const photos = [
-      { file: "images/landscape1.jpg", category: "landscape", caption: "" },
-      { file: "images/landscape2.jpg", category: "landscape", caption: "" },
-      { file: "images/landscape3.jpg", category: "landscape", caption: "" },
-      { file: "images/landscape4.jpg", category: "landscape", caption: "" },
+    const planets = [
+      {
+        id: "ireland", name: "Ireland", subtitle: "Landscape", color: "#7fbf7f",
+        photos: [
+          { file: "images/ireland1.jpg", caption: "" },
+          { file: "images/ireland2.jpg", caption: "" },
+          { file: "images/ireland3.jpg", caption: "" },
+          { file: "images/ireland4.jpg", caption: "" },
+        ]
+      },
+      {
+        id: "usa", name: "USA", subtitle: "Landscape", color: "#7fa8d9",
+        photos: [
+          { file: "images/USA1.jpg", caption: "" },
+          { file: "images/USA2.jpg", caption: "" },
+          { file: "images/USA3.jpg", caption: "" },
+          { file: "images/USA4.jpg", caption: "" },
+        ]
+      },
+      {
+        id: "wildlife", name: "Wildlife", subtitle: "", color: "#d9b26f",
+        photos: [
+          { file: "images/wild1.jpg", caption: "" },
+          { file: "images/wild2.jpg", caption: "" },
+          { file: "images/wild3.jpg", caption: "" },
+          { file: "images/wild4.jpg", caption: "" },
+        ]
+      },
+      {
+        id: "friends", name: "Friends", subtitle: "", color: "#e09aa8",
+        photos: [
+          { file: "images/friends1.jpg", caption: "" },
+          { file: "images/friends2.jpg", caption: "" },
+          { file: "images/friends3.jpg", caption: "" },
+          { file: "images/friends4.jpg", caption: "" },
+        ]
+      },
     ];
 
     // ============================================================
@@ -312,8 +385,8 @@
       // "dQw4w9WgXcQ",
     ];
 
-    // ---------- Sphere settings (optional to tweak) ----------
-    const MIN_TILES = 100;      // photos repeat until the sphere has at least this many
+    // ---------- Settings (optional to tweak) ----------
+    const MIN_TILES = 100;       // photos repeat until each planet has at least this many
     const HOVER_DELAY = 500;     // ms of hovering before a photo enlarges (500 = 0.5 sec)
     const IDLE_SPEED = 0;        // spin when nobody is touching it (0 = stays still)
     const RANDOMNESS = 0.6;      // how scattered the photos are (0 = perfectly even, 1 = very random)
@@ -321,6 +394,11 @@
     // ================= You don't need to edit below =================
     document.getElementById("year").textContent = new Date().getFullYear();
     document.documentElement.style.setProperty("--hover-delay", HOVER_DELAY / 1000 + "s");
+
+    // ---------- navigation links ----------
+    const nav = document.getElementById("nav");
+    const navLinks = [["home", "Home"], ...planets.map(p => [p.id, p.name]), ["video", "Video"], ["about", "About"]];
+    nav.innerHTML = navLinks.map(([id, name]) => `<a href="#${id}">${name}</a>`).join("");
 
     // ---------- small vector / matrix helpers ----------
     const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
@@ -343,68 +421,87 @@
       return [a, b, cross(a, b)];
     }
 
-    // ---------- build the sphere ----------
+    // ---------- build the planets ----------
     const stage = document.getElementById("stage");
-    let tiles = [];
-    let radius = 300;
-    let rot = axisAngle([1, 0, 0], -0.35);   // start with a slight tilt
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let radius = 250;
+    let focused = 0;
 
-    function buildSphere() {
-      if (!photos.length) return;
+    const worlds = planets.map((data, idx) => {
+      const el = document.createElement("div");
+      el.className = "planet";
+      el.style.setProperty("--glow", data.color || "#ccc");
+      stage.appendChild(el);
+
+      const label = document.createElement("button");
+      label.className = "planet-label";
+      label.textContent = data.name;
+      label.addEventListener("click", () => focusPlanet(idx));
+      stage.appendChild(label);
+
+      const world = {
+        data, el, label, tiles: [],
+        rot: mulMM(axisAngle([0, 1, 0], idx * 1.3), axisAngle([1, 0, 0], -0.35)),
+        vel: { x: 0, y: 0 },
+        dirty: true
+      };
+      buildTiles(world, idx);
+      el.addEventListener("click", () => { if (idx !== focused) focusPlanet(idx); });
+      return world;
+    });
+
+    function buildTiles(world, idx) {
+      const photos = world.data.photos;
       const n = Math.max(MIN_TILES, photos.length);
       const golden = Math.PI * (3 - Math.sqrt(5));
       // seeded random numbers, so the layout looks random but is the same on every visit
-      let seed = 12345;
+      let seed = 12345 + idx * 7919;
       const rand = () => {
         seed = (seed + 0x6D2B79F5) | 0;
         let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       };
-      const spacing = Math.sqrt(4 * Math.PI / n);   // typical gap between photos
+      const spacing = Math.sqrt(4 * Math.PI / n);
       for (let i = 0; i < n; i++) {
-        // start from evenly spread points (Fibonacci lattice)...
+        // evenly spread points (Fibonacci lattice), each nudged a random amount
         const y = 1 - ((i + 0.5) / n) * 2;
         const r = Math.sqrt(1 - y * y);
         const th = golden * i;
-        let p = [Math.cos(th) * r, y, Math.sin(th) * r];
-        // ...then nudge each one a random amount and push it back onto the sphere
         const j = spacing * RANDOMNESS;
-        p = norm([p[0] + (rand() - 0.5) * j, p[1] + (rand() - 0.5) * j, p[2] + (rand() - 0.5) * j]);
+        const p = norm([
+          Math.cos(th) * r + (rand() - 0.5) * j,
+          y + (rand() - 0.5) * j,
+          Math.sin(th) * r + (rand() - 0.5) * j
+        ]);
 
-        const photo = photos[i % photos.length];
         const el = document.createElement("div");
         el.className = "tile";
-        const img = new Image();
-        img.src = photo.file;
-        img.alt = photo.caption;
-        img.draggable = false;
-        el.appendChild(img);
-        stage.appendChild(el);
-        const tile = { el, img, p, photo };
-        tiles.push(tile);
-        attachHover(tile);
+        const tile = { el, img: null, p, photo: null, world };
+        if (photos.length) {
+          const photo = photos[i % photos.length];
+          const img = new Image();
+          img.src = photo.file;
+          img.alt = photo.caption || world.data.name;
+          img.draggable = false;
+          el.appendChild(img);
+          tile.img = img;
+          tile.photo = photo;
+          attachHover(tile);
+        } else {
+          el.classList.add("empty");
+        }
+        world.el.appendChild(el);
+        world.tiles.push(tile);
       }
-      sizeSphere();
     }
 
-    function sizeSphere() {
-      const w = stage.clientWidth, h = stage.clientHeight;
-      radius = Math.min(w, h) * (w < 600 ? 0.36 : 0.32);
-      const tw = Math.min(radius * Math.sqrt(4 * Math.PI / tiles.length) * 0.8, radius * 0.6);
-      stage.style.setProperty("--tw", tw + "px");
-      stage.style.setProperty("--th", (tw * 2 / 3) + "px");
-      stage.style.perspective = (radius * 4) + "px";
-      render();
-    }
-
-    function render() {
-      for (const t of tiles) {
-        const c = mulMV(rot, t.p);
+    function renderWorld(world) {
+      for (const t of world.tiles) {
+        const c = mulMV(world.rot, t.p);
         // move each photo to its spot on the sphere but keep it upright and facing you
         t.el.style.transform = `translate3d(${c[0]*radius}px,${c[1]*radius}px,${c[2]*radius}px)`;
-        const facing = c[2];                     // 1 = facing you, -1 = far side
+        const facing = c[2];
         t.el.style.zIndex = Math.round((facing + 1) * 1000);
         t.el.style.opacity = facing > 0 ? 0.55 + 0.45 * facing : 0.1 + 0.2 * (1 + facing);
         const isBack = facing < 0.1;
@@ -413,24 +510,94 @@
           if (isBack && hoverTile === t) cancelHover();
         }
       }
+      world.dirty = false;
     }
 
-    function spin(dx, dy, speed = 0.005) {
+    // ---------- placing the planets on screen ----------
+    function layout() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      radius = Math.min(w, h) * (w < 600 ? 0.3 : 0.26);
+      const box = radius * 3;
+      const tw = Math.min(radius * Math.sqrt(4 * Math.PI / MIN_TILES) * 0.8, radius * 0.6);
+      stage.style.setProperty("--box", box + "px");
+      stage.style.setProperty("--tw", tw + "px");
+      stage.style.setProperty("--th", (tw * 2 / 3) + "px");
+
+      // small planets along the bottom
+      const others = worlds.map((_, i) => i).filter(i => i !== focused);
+      const gap = w / (others.length + 1);
+      const mini = Math.min(0.24, (gap * 0.8) / box, (h * 0.2) / box);
+      const miniSize = box * mini;
+      const miniY = h - miniSize / 2 - 42;
+
+      // the focused planet fills the space above them
+      const topSpace = w < 600 ? 170 : 60;
+      const avail = miniY - miniSize / 2 - topSpace;
+      const big = Math.min(1, avail / box);
+      const bigY = topSpace + avail / 2;
+
+      worlds.forEach((world, i) => {
+        world.el.style.perspective = (radius * 4) + "px";
+        world.dirty = true;
+        let cx, cy, s;
+        if (i === focused) {
+          cx = w / 2; cy = bigY; s = big;
+          world.label.classList.add("hidden");
+        } else {
+          const k = others.indexOf(i);
+          cx = gap * (k + 1); cy = miniY; s = mini;
+          world.label.classList.remove("hidden");
+          world.label.style.left = cx + "px";
+          world.label.style.top = (cy + miniSize / 2 - 4) + "px";
+        }
+        world.el.style.transform = `translate(${cx - box / 2}px, ${cy - box / 2}px) scale(${s})`;
+        world.el.classList.toggle("focused", i === focused);
+        world.el.classList.toggle("mini", i !== focused);
+      });
+
+      const d = worlds[focused].data;
+      document.getElementById("planet-name").textContent = d.name;
+      document.getElementById("planet-sub").textContent =
+        d.photos.length ? (d.subtitle || "") : "Photos coming soon";
+    }
+
+    function focusPlanet(i) {
+      if (i === focused) return;
+      cancelHover();
+      closeMagnifier();
+      worlds[focused].vel = { x: 0, y: 0 };
+      focused = (i + worlds.length) % worlds.length;
+      layout();
+    }
+    document.getElementById("prevPlanet").addEventListener("click", () => focusPlanet(focused - 1));
+    document.getElementById("nextPlanet").addEventListener("click", () => focusPlanet(focused + 1));
+    document.addEventListener("keydown", e => {
+      if (document.getElementById("lightbox").classList.contains("open")) return;
+      if (window.scrollY > window.innerHeight / 2) return;
+      if (e.key === "ArrowLeft") focusPlanet(focused - 1);
+      if (e.key === "ArrowRight") focusPlanet(focused + 1);
+    });
+
+    function spin(world, dx, dy, speed = 0.005) {
       const d = Math.hypot(dx, dy);
       if (d < 1e-6) return;
-      rot = mulMM(axisAngle([-dy / d, dx / d, 0], d * speed), rot);
+      world.rot = mulMM(axisAngle([-dy / d, dx / d, 0], d * speed), world.rot);
+      world.dirty = true;
     }
 
-    // ---------- dragging ----------
-    let dragging = false, last = null, vel = { x: 0, y: 0 }, moved = 0;
+    // ---------- dragging the focused planet ----------
+    let dragging = false, last = null, moved = 0;
     let idleDir = { x: 1, y: 0.25 };
 
     stage.addEventListener("pointerdown", e => {
       if (magnified) return;
+      if (e.target.closest("button")) return;
+      const p = e.target.closest(".planet");
+      if (p && !p.classList.contains("focused")) return;   // small planets are clicked, not dragged
       dragging = true;
       moved = 0;
       last = { x: e.clientX, y: e.clientY };
-      vel = { x: 0, y: 0 };
+      worlds[focused].vel = { x: 0, y: 0 };
       stage.classList.add("grabbing");
       if (e.pointerType === "mouse") cancelHover();
     });
@@ -439,8 +606,9 @@
       if (!dragging) return;
       const dx = e.clientX - last.x, dy = e.clientY - last.y;
       last = { x: e.clientX, y: e.clientY };
-      spin(dx, dy);
-      vel = { x: dx, y: dy };
+      const world = worlds[focused];
+      spin(world, dx, dy);
+      world.vel = { x: dx, y: dy };
       moved += Math.abs(dx) + Math.abs(dy);
       if (moved > 8) cancelHover();
     });
@@ -449,8 +617,8 @@
       if (!dragging) return;
       dragging = false;
       stage.classList.remove("grabbing");
-      const s = Math.hypot(vel.x, vel.y);
-      if (s > 0.5) idleDir = { x: vel.x / s, y: vel.y / s };   // keep spinning the way it was thrown
+      const v = worlds[focused].vel, s = Math.hypot(v.x, v.y);
+      if (s > 0.5) idleDir = { x: v.x / s, y: v.y / s };
       if (e && e.pointerType !== "mouse") cancelHover();
     }
     window.addEventListener("pointerup", endDrag);
@@ -465,6 +633,7 @@
     function attachHover(tile) {
       tile.el.addEventListener("pointerenter", e => {
         if (magnified || tile.el.classList.contains("back")) return;
+        if (!tile.world.el.classList.contains("focused")) return;
         if (dragging && e.pointerType === "mouse") return;
         cancelHover();
         hoverTile = tile;
@@ -500,10 +669,9 @@
       magImg.alt = tile.photo.caption;
       magCap.textContent = tile.photo.caption || "";
 
-      // start at the tile's size and position, then grow
       mag.style.transition = "none";
       Object.assign(mag.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
-      mag.offsetWidth;   // apply the starting size before animating
+      mag.offsetWidth;
       mag.style.transition = "";
       mag.classList.add("open");
       Object.assign(mag.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
@@ -519,7 +687,6 @@
         closeMagnifier();
       }
     }
-
     function closeMagnifier() {
       mag.classList.remove("open");
       magnified = null;
@@ -530,42 +697,55 @@
     // ---------- animation loop ----------
     let frame = 0;
     function tick() {
+      const world = worlds[focused];
       if (!dragging && !magnified) {
-        const s = Math.hypot(vel.x, vel.y);
+        const v = world.vel, s = Math.hypot(v.x, v.y);
         if (s > 0.05) {
-          spin(vel.x, vel.y);          // momentum after a flick
-          vel.x *= 0.95; vel.y *= 0.95;
+          spin(world, v.x, v.y);       // momentum after a flick
+          v.x *= 0.95; v.y *= 0.95;
         } else if (!reduceMotion && IDLE_SPEED > 0) {
-          spin(idleDir.x * IDLE_SPEED, idleDir.y * IDLE_SPEED);
+          spin(world, idleDir.x * IDLE_SPEED, idleDir.y * IDLE_SPEED);
         }
       }
-      if (++frame % 120 === 0) rot = orthonormalize(rot);
-      render();
+      if (++frame % 120 === 0) world.rot = orthonormalize(world.rot);
+      for (const w of worlds) if (w.dirty) renderWorld(w);
       requestAnimationFrame(tick);
     }
 
-    buildSphere();
-    window.addEventListener("resize", sizeSphere);
+    layout();
+    window.addEventListener("resize", layout);
     requestAnimationFrame(tick);
 
-    // ---------- galleries ----------
-    document.querySelectorAll(".gallery").forEach(gallery => {
-      const cat = gallery.dataset.category;
-      const inCat = photos.filter(p => p.category === cat);
-      if (!inCat.length) gallery.outerHTML = '<p class="empty">Photos coming soon.</p>';
-      inCat.forEach(p => {
-        const img = document.createElement("img");
-        img.src = p.file;
-        img.alt = p.caption;
-        img.loading = "lazy";
-        img.addEventListener("click", () => openLightbox(photos.indexOf(p)));
-        gallery.appendChild(img);
-      });
+    // ---------- galleries (one section per planet) ----------
+    const allPhotos = [];
+    const galleries = document.getElementById("galleries");
+    planets.forEach(p => {
+      const section = document.createElement("section");
+      section.className = "content";
+      section.id = p.id;
+      section.innerHTML = `<h2>${p.name}${p.subtitle ? " " + p.subtitle : ""}</h2>`;
+      if (!p.photos.length) {
+        section.innerHTML += '<p class="empty-note">Photos coming soon.</p>';
+      } else {
+        const grid = document.createElement("div");
+        grid.className = "gallery";
+        p.photos.forEach(photo => {
+          const index = allPhotos.push(photo) - 1;
+          const img = document.createElement("img");
+          img.src = photo.file;
+          img.alt = photo.caption || p.name;
+          img.loading = "lazy";
+          img.addEventListener("click", () => openLightbox(index));
+          grid.appendChild(img);
+        });
+        section.appendChild(grid);
+      }
+      galleries.appendChild(section);
     });
 
     const videoBox = document.querySelector(".videos");
     if (youtubeVideos.length === 0) {
-      videoBox.innerHTML = '<p class="empty">Videos coming soon.</p>';
+      videoBox.innerHTML = '<p class="empty-note">Videos coming soon.</p>';
     }
     youtubeVideos.forEach(id => {
       const frameEl = document.createElement("iframe");
@@ -582,13 +762,13 @@
     let current = 0;
     function openLightbox(i) {
       current = i;
-      lbImg.src = photos[i].file;
-      lbImg.alt = photos[i].caption;
-      lbCap.textContent = photos[i].caption;
+      lbImg.src = allPhotos[i].file;
+      lbImg.alt = allPhotos[i].caption;
+      lbCap.textContent = allPhotos[i].caption;
       lb.classList.add("open");
     }
     function closeLightbox() { lb.classList.remove("open"); }
-    function step(d) { openLightbox((current + d + photos.length) % photos.length); }
+    function step(d) { openLightbox((current + d + allPhotos.length) % allPhotos.length); }
     document.getElementById("close").onclick = closeLightbox;
     document.getElementById("prev").onclick = e => { e.stopPropagation(); step(-1); };
     document.getElementById("next").onclick = e => { e.stopPropagation(); step(1); };
