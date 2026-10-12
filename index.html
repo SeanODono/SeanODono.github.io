@@ -55,14 +55,150 @@
     #stage {
       position: absolute;
       inset: 0;
-      cursor: grab;
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
       perspective-origin: 50% 50%;
     }
-    #stage.grabbing { cursor: grabbing; }
     #stage.over-mini { cursor: pointer; }
+
+    /* trail canvases: one per planet, sitting between the far and near photos */
+    canvas.paths {
+      position: absolute;
+      pointer-events: none;
+      image-rendering: pixelated;      /* keep the trail pixels hard-edged, 8-bit style */
+      image-rendering: crisp-edges;
+      z-index: 20000;
+      transition: opacity 0.25s;
+    }
+
+    /* ---------- character ---------- */
+    #hero {
+      position: absolute;
+      z-index: 40000;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      will-change: transform, opacity;   /* own graphics layer, so it never flickers */
+      backface-visibility: hidden;
+    }
+    #hero.away, #hero.hidden-for-photo { opacity: 0; }
+    #hero svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      image-rendering: pixelated;
+    }
+    #hero .shadow {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.22);
+    }
+    #hero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
+    #hero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; transform: translate(4%, 4%); }
+    #hero.is-car .car { display: block; }
+    #hero.is-sheep .frame-a { display: block; }
+    /* two-frame trot when the sheep is moving */
+    #hero.is-sheep.moving .frame-a { animation: frameA var(--step, 0.3s) steps(1) infinite; }
+    #hero.is-sheep.moving .frame-b { display: block; animation: frameB var(--step, 0.3s) steps(1) infinite; }
+    @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
+    @keyframes frameB { 0% { opacity: 0; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4%); } }
+    #hero.is-car.moving .car { animation: rumble 0.1s steps(1) infinite; }
+    @keyframes rumble { 0% { transform: translateY(0); } 50% { transform: translateY(1.5%); } }
+
+    /* ---------- settings ---------- */
+    #gear {
+      position: absolute;
+      left: 1rem; bottom: 1rem;
+      width: 2.4rem; height: 2.4rem;
+      border-radius: 50%;
+      border: 1px solid #e2e2e2;
+      background: rgba(255,255,255,0.9);
+      font-size: 1.3rem;
+      line-height: 1;
+      color: var(--muted);
+      cursor: pointer;
+      z-index: 60;
+      transition: color 0.2s, transform 0.4s;
+    }
+    #gear:hover { color: var(--text); transform: rotate(60deg); }
+    #settings {
+      position: absolute;
+      left: 1rem; bottom: 4rem;
+      width: 15rem;
+      padding: 1rem;
+      background: #fff;
+      border: 1px solid #e6e6e6;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+      font-family: system-ui, sans-serif;
+      font-size: 0.8rem;
+      z-index: 60;
+      display: none;
+    }
+    #settings.open { display: block; }
+    .set-row { display: block; margin-bottom: 0.9rem; }
+    .set-label {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.68rem;
+      margin-bottom: 0.35rem;
+    }
+    .set-label output { color: var(--text); letter-spacing: 0; }
+    #settings input[type=range] { width: 100%; accent-color: var(--accent); }
+    .seg { display: flex; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+    .seg button {
+      flex: 1;
+      border: none;
+      background: #fff;
+      padding: 0.4rem;
+      font: inherit;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .seg button.on { background: var(--text); color: #fff; }
+    #resetSettings {
+      border: none;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    /* ---------- touch pad ---------- */
+    #dpad {
+      display: none;
+      position: absolute;
+      left: 50%; bottom: 1rem;
+      transform: translateX(-50%);
+      gap: 0.5rem;
+      z-index: 60;
+    }
+    #dpad button {
+      width: 2.8rem; height: 2.8rem;
+      border-radius: 50%;
+      border: 1px solid #ddd;
+      background: rgba(255,255,255,0.85);
+      color: var(--muted);
+      font-size: 0.9rem;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #dpad button.pressed { background: var(--text); color: #fff; }
+    #dpad [data-key=KeyA] { order: 1; }
+    #dpad [data-key=KeyW] { order: 2; }
+    #dpad [data-key=KeyS] { order: 3; }
+    #dpad [data-key=KeyD] { order: 4; }
+    @media (hover: none) and (pointer: coarse) {
+      #dpad { display: flex; }
+    }
 
     .tile, .glow {
       position: absolute;
@@ -290,6 +426,9 @@
       .home-title { left: 1rem; top: 4.8rem; }
       .hint { display: none; }
       .arrow { font-size: 2rem; padding: 0.5rem; }
+      #gear { bottom: 9.5rem; }
+      #settings { bottom: 12.5rem; }
+      #dpad { bottom: 9.3rem; }
     }
   </style>
 </head>
@@ -303,7 +442,46 @@
       <h1>Sean O'Dono</h1>
       <div id="planet-name"></div>
       <div id="planet-sub"></div>
-      <div class="hint">Drag to spin &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
+      <div class="hint"><b>W A S D</b> to move &middot; <b>C</b> to switch sheep / car &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
+    </div>
+
+    <!-- the character: an 8-bit sheep or car (drawn by the script below) -->
+    <div id="hero" aria-hidden="true"></div>
+
+    <!-- touch controls (only shown on phones / tablets) -->
+    <div id="dpad">
+      <button data-key="KeyW" aria-label="Up">&#9650;</button>
+      <button data-key="KeyA" aria-label="Left">&#9664;</button>
+      <button data-key="KeyD" aria-label="Right">&#9654;</button>
+      <button data-key="KeyS" aria-label="Down">&#9660;</button>
+    </div>
+
+    <!-- settings -->
+    <button id="gear" aria-label="Settings">&#9881;</button>
+    <div id="settings">
+      <div class="set-row">
+        <span class="set-label">Character</span>
+        <div class="seg">
+          <button data-char="sheep">Sheep</button>
+          <button data-char="car">Car</button>
+        </div>
+      </div>
+      <div class="set-row">
+        <span class="set-label">Planet</span>
+        <div class="seg">
+          <button data-ground="clear">Clear</button>
+          <button data-ground="grass">Grass</button>
+        </div>
+      </div>
+      <label class="set-row">
+        <span class="set-label">Planet size <output id="sizeOut"></output></span>
+        <input id="sizeInput" type="range" min="0" max="1000" step="1">
+      </label>
+      <label class="set-row">
+        <span class="set-label">Speed <output id="speedOut"></output></span>
+        <input id="speedInput" type="range" min="0" max="1000" step="1">
+      </label>
+      <button id="resetSettings">Reset</button>
     </div>
     <button class="arrow" id="prevPlanet" aria-label="Previous planet">&#8249;</button>
     <button class="arrow" id="nextPlanet" aria-label="Next planet">&#8250;</button>
@@ -397,12 +575,21 @@
     ];
 
     // ---------- Settings (optional to tweak) ----------
-    const MIN_TILES = 100;          // photos repeat until each planet has at least this many
     const HOVER_DELAY = 500;        // ms of hovering before a photo enlarges (500 = 0.5 sec)
-    const IDLE_SPEED = 0;           // spin when nobody is touching it (0 = stays still)
     const TRANSITION_TIME = 2000;   // ms for the planets to swap places
-    const TUBE_SIZE = 0.1;        // thickness of the ring's tube, compared to the main planet
-    const PLANET_SIZE = 1;          // make the main planet bigger or smaller (1.1 = 10% bigger)
+    const TUBE_SIZE = 0.1;          // thickness of the ring's tube, compared to the main planet
+
+    // ---------- Paths and photo spacing ----------
+    const MAIN_PATHS = 3;           // how many main trails loop around each planet
+    const PHOTO_GAP = 0.42;         // distance between photos along a trail (bigger = more spread out, fewer photos)
+    const PHOTO_SIZE = 0.16;        // size of each photo, compared to the planet
+    const PATH_WIDTH = 0.05;        // width of the main trails, compared to the planet
+
+    // Starting values. Visitors can change these with the gear button on the page.
+    const CHARACTER = "sheep";      // "sheep" or "car"
+    const PLANET_SIZE = 1;          // size of the main planet (1.2 = 20% bigger, up to 10)
+    const SPEED = 1;                // how fast the character moves (2 = twice as fast, up to 10)
+    const GROUND = "clear";         // "clear" (see-through planet) or "grass" (solid 8-bit grassy planet)
 
     // ================= You don't need to edit below =================
     // Always open at the top (the planets), even if the link has #about etc. or the browser remembers a scroll spot
@@ -443,43 +630,108 @@
       return [a, b, cross(a, b)];
     }
 
-    // ---------- tidy layout: rows of photos like lines of latitude ----------
-    const ROWS = Math.max(5, Math.round(Math.sqrt(MIN_TILES / 0.85)));
-    function spherePoints(n) {
-      const lats = [], weights = [];
-      for (let k = 0; k < ROWS; k++) {
-        const lat = -Math.PI / 2 + (k + 0.5) * Math.PI / ROWS;
-        lats.push(lat);
-        weights.push(Math.cos(lat));
-      }
-      const total = weights.reduce((a, b) => a + b, 0);
-      const counts = weights.map(w => Math.max(1, Math.round(n * w / total)));
-      const pts = [];
-      lats.forEach((lat, k) => {
-        const c = counts[k];
-        const offset = (k % 2) * 0.5;          // stagger every other row like bricks
-        for (let i = 0; i < c; i++) {
-          const lon = (i + offset) / c * Math.PI * 2;
-          pts.push([Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]);
-        }
-      });
-      return pts;
-    }
-
     // ---------- build the planets ----------
     // Every photo of every planet lives in one shared 3D space, so they can fly past each other.
     const stage = document.getElementById("stage");
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let radius = 250;          // main planet radius in pixels
+    let baseRadius = 250;      // main planet radius before the size setting is applied
     let slots = [];            // slot 0 = the main spot, the rest = small planet spots
     let focused = 0;           // which planet is in the main spot
     let transition = null;
+    let persp = 2200;          // the 3D perspective depth used by the page
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+    function seeded(seed) {
+      return () => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    const angleBetween = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
+
+    // ---------- trails and photos ----------
+    // A few winding main trails loop around the planet. Photos sit beside the trails, alternating
+    // left and right, and each one is joined to its trail by a short side path.
+    function buildLayout(world, minPhotos) {
+      const rand = seeded(777 + world.idx * 131);
+      const twist = mulMM(axisAngle(norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), rand() * 6.28),
+                          axisAngle([0, 1, 0], rand() * 6.28));
+      const tilts = [[0, 1, 0], [1, 0.2, 0.35], [-0.3, 0.4, 1], [0.8, -0.7, -0.5], [0.2, 0.9, -0.8]];
+      const mains = [];
+      for (let k = 0; k < Math.max(1, Math.min(MAIN_PATHS, tilts.length)); k++) {
+        const n = norm(mulMV(twist, norm(tilts[k])));
+        const a = norm(cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+        const b = cross(n, a);
+        const f1 = 2 + Math.floor(rand() * 3), p1 = rand() * 6.28, a1 = 0.1 + rand() * 0.08;
+        const f2 = f1 + 3, p2 = rand() * 6.28, a2 = 0.04;
+        const pts = [], N = 260;
+        for (let i = 0; i <= N; i++) {
+          const u = i / N * Math.PI * 2;
+          const w = a1 * Math.sin(f1 * u + p1) + a2 * Math.sin(f2 * u + p2);   // gentle meander
+          pts.push(norm([
+            a[0] * Math.cos(u) + b[0] * Math.sin(u) + n[0] * w,
+            a[1] * Math.cos(u) + b[1] * Math.sin(u) + n[1] * w,
+            a[2] * Math.cos(u) + b[2] * Math.sin(u) + n[2] * w
+          ]));
+        }
+        mains.push(pts);
+      }
+      const allTrail = mains.flat();
+      const offset = PHOTO_SIZE * 0.75 + PATH_WIDTH * 0.6 + 0.02;   // far enough that photos don't cover the trail
+      const minGap = PHOTO_SIZE * 1.85;                              // photos never overlap each other
+
+      let gap = PHOTO_GAP, photos, spurs;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        photos = []; spurs = [];
+        mains.forEach((pts, k) => {
+          let travelled = gap * (0.3 + 0.5 * rand()), side = k % 2 ? 1 : -1;
+          for (let i = 1; i < pts.length - 1; i++) {
+            travelled += angleBetween(pts[i - 1], pts[i]);
+            if (travelled < gap) continue;
+            const p = pts[i];
+            const tan = norm([pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1], pts[i + 1][2] - pts[i - 1][2]]);
+            const out = cross(p, tan);
+            side = -side;
+            const q = norm([p[0] + out[0] * offset * side, p[1] + out[1] * offset * side, p[2] + out[2] * offset * side]);
+            if (photos.some(o => angleBetween(o, q) < minGap)) continue;
+            if (allTrail.some(o => angleBetween(o, q) < offset * 0.8)) continue;
+            travelled = 0;
+            photos.push(q);
+            // short side path from the trail to the photo, with a slight bend
+            const spur = [], bend = (rand() - 0.5) * offset * 0.5;
+            for (let s = 0; s <= 6; s++) {
+              const t = s / 6, b2 = Math.sin(Math.PI * t) * bend;
+              spur.push(norm([
+                lerp(p[0], q[0], t) + tan[0] * b2,
+                lerp(p[1], q[1], t) + tan[1] * b2,
+                lerp(p[2], q[2], t) + tan[2] * b2
+              ]));
+            }
+            spurs.push(spur);
+          }
+        });
+        if (photos.length >= minPhotos || gap < 0.2) break;
+        gap *= 0.85;                       // lots of photos: pack them a bit closer
+      }
+      world.paths = [
+        ...spurs.map(pts => ({ pts, w: 0.6 })),
+        ...mains.map(pts => ({ pts, w: 1 }))
+      ];
+      return photos;
+    }
 
     const worlds = planets.map((data, idx) => {
       const glow = document.createElement("div");
       glow.className = "glow";
       glow.style.setProperty("--glow", data.color || "#ccc");
       stage.appendChild(glow);
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "paths";
+      stage.appendChild(canvas);
 
       const label = document.createElement("button");
       label.className = "planet-label";
@@ -488,18 +740,19 @@
       stage.appendChild(label);
 
       const world = {
-        idx, data, glow, label, tiles: [], slot: idx,
+        idx, data, glow, label, canvas, ctx: canvas.getContext("2d", { willReadFrequently: true }), crect: null,
+        tiles: [], paths: [], slot: idx,
         rot: mulMM(axisAngle([0, 1, 0], idx * 0.7), axisAngle([1, 0, 0], -0.3)),
-        vel: { x: 0, y: 0 },
+        pathAlpha: 1, pathsDirty: true,
         dirty: true
       };
-      buildTiles(world);
+      buildTiles(world, buildLayout(world, data.photos.length));
       return world;
     });
 
-    function buildTiles(world) {
+    function buildTiles(world, pts) {
       const photos = world.data.photos;
-      spherePoints(Math.max(MIN_TILES, photos.length)).forEach((p, i) => {
+      pts.forEach((p, i) => {
         const el = document.createElement("div");
         el.className = "tile";
         const tile = { el, img: null, p, photo: null, world, lag: 0 };
@@ -522,10 +775,11 @@
     }
 
     // put one photo at a point in 3D (pixels from the middle of the screen)
-    function place(t, x, y, z, s, facing) {
+    function place(t, x, y, z, s, facing, boost = 0) {
       t.el.style.transform = `translate3d(${x}px,${y}px,${z}px) scale(${s})`;
-      t.el.style.zIndex = Math.round(z + 20000);
-      t.el.style.opacity = facing > 0 ? 0.55 + 0.45 * facing : 0.1 + 0.2 * (1 + facing);
+      t.el.style.zIndex = Math.round(z + 20000 + boost);
+      // photos facing you are solid; only ones turning away toward the edge fade out
+      t.el.style.opacity = facing > 0 ? Math.min(1, 0.55 + facing * 1.6) : 0.1 + 0.2 * (1 + facing);
       const isBack = facing < 0.1;
       if (isBack !== t.el.classList.contains("back")) {
         t.el.classList.toggle("back", isBack);
@@ -541,12 +795,202 @@
     // a planet sitting still in its spot
     function drawResting(world) {
       const { x, y, s } = slots[world.slot];
+      const boost = world.slot === 0 ? 0 : 30000;     // small planets always sit on top of a huge main planet
       for (const t of world.tiles) {
         const c = mulMV(world.rot, t.p);
-        place(t, x + c[0]*radius*s, y + c[1]*radius*s, c[2]*radius*s, s, c[2]);
+        place(t, x + c[0]*radius*s, y + c[1]*radius*s, c[2]*radius*s, s, c[2], boost);
       }
+      world.canvas.style.zIndex = 20000 + boost;
       placeGlow(world, x, y, 0, s);
       world.dirty = false;
+      world.pathsDirty = true;
+    }
+
+    // ---------- drawing the trails ----------
+    // Each planet paints its trails on its own sharp canvas. The canvas sits between the far side
+    // and the near side of the planet, so the photos always sit on top of the trails.
+    // size of one trail "pixel" on screen, matched to the pixels of the sheep and car sprites
+    let trailPix = 4;
+    function sizePathCanvas(world) {
+      const w = stage.clientWidth, h = stage.clientHeight, sl = slots[world.slot];
+      trailPix = Math.max(2, Math.round(baseRadius * 0.3 * Math.min(1, settings.size) / 18));
+      const R = radius * sl.s, k = persp / (persp - R);
+      const half = R * k * 1.08;
+      const cx = w / 2 + sl.x, cy = h / 2 + sl.y;
+      // line the canvas up with the pixel grid so every trail pixel is a clean square
+      const snap = v => Math.floor(v / trailPix) * trailPix;
+      const left = Math.max(0, snap(cx - half)), top = Math.max(0, snap(cy - half));
+      const right = Math.min(w, cx + half), bottom = Math.min(h, cy + half);
+      const pw = Math.max(1, Math.ceil((right - left) / trailPix)), ph = Math.max(1, Math.ceil((bottom - top) / trailPix));
+      world.crect = { left, top, w: pw * trailPix, h: ph * trailPix };
+      world.canvas.width = pw;
+      world.canvas.height = ph;
+      Object.assign(world.canvas.style, { left: left + "px", top: top + "px", width: pw * trailPix + "px", height: ph * trailPix + "px" });
+      world.pathsDirty = true;
+    }
+
+    // a tiny 8-bit palette for the dirt
+    const TRAIL_PALETTE = [[94, 66, 41], [148, 113, 74], [186, 149, 98]];   // dark edge, dirt, worn middle
+    const hex = c => "rgb(" + c.join(",") + ")";
+    const PATH_LAYERS = [
+      { width: 1.5, color: hex(TRAIL_PALETTE[0]) },
+      { width: 1.0, color: hex(TRAIL_PALETTE[1]) },
+      { width: 0.35, color: hex(TRAIL_PALETTE[2]) }
+    ];
+    function drawWorldPaths(world) {
+      world.pathsDirty = false;
+      const ctx = world.ctx, r = world.crect;
+      if (!r) return;
+      const W = world.canvas.width, H = world.canvas.height;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      world.canvas.style.opacity = world.pathAlpha;
+      if (world.pathAlpha <= 0) return;
+      ctx.setTransform(1 / trailPix, 0, 0, 1 / trailPix, 0, 0);     // draw in screen pixels onto the small canvas
+      const sl = slots[world.slot], R = radius * sl.s, m = world.rot;
+      const ox = stage.clientWidth / 2 + sl.x - r.left, oy = stage.clientHeight / 2 + sl.y - r.top;
+      const base = PATH_WIDTH * R;
+
+      // work out where every trail point lands on screen
+      for (const path of world.paths) {
+        const n = path.pts.length;
+        if (!path.proj) path.proj = new Float32Array(n * 4);
+        const P = path.proj;
+        for (let i = 0; i < n; i++) {
+          const p = path.pts[i];
+          const z = m[2][0]*p[0] + m[2][1]*p[1] + m[2][2]*p[2];
+          const k = persp / (persp - z * R);
+          P[i*4]   = ox + (m[0][0]*p[0] + m[0][1]*p[1] + m[0][2]*p[2]) * R * k;
+          P[i*4+1] = oy + (m[1][0]*p[0] + m[1][1]*p[1] + m[1][2]*p[2]) * R * k;
+          P[i*4+2] = z;
+          P[i*4+3] = k;
+        }
+      }
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      // segments are grouped by (pixel-rounded) width so each group is drawn in one go
+      for (const layer of PATH_LAYERS) {
+        ctx.strokeStyle = layer.color;
+        const groups = new Map();
+        for (const path of world.paths) {
+          const P = path.proj, n = path.pts.length;
+          for (let i = 0; i < n - 1; i++) {
+            const z1 = P[i*4+2], z2 = P[i*4+6];
+            if (z1 < 0.02 || z2 < 0.02) continue;          // only the side facing you
+            const z = (z1 + z2) / 2, k = (P[i*4+3] + P[i*4+7]) / 2;
+            const width = Math.max(trailPix * 0.9, base * path.w * layer.width * k * (0.3 + 0.7 * z));
+            const g = Math.round(width / (trailPix * 0.5));
+            let list = groups.get(g);
+            if (!list) groups.set(g, list = []);
+            list.push(P[i*4], P[i*4+1], P[i*4+4], P[i*4+5]);
+          }
+        }
+        for (const [g, list] of groups) {
+          ctx.lineWidth = g * trailPix * 0.5;
+          ctx.beginPath();
+          for (let q = 0; q < list.length; q += 4) {
+            ctx.moveTo(list[q], list[q + 1]);
+            ctx.lineTo(list[q + 2], list[q + 3]);
+          }
+          ctx.stroke();
+        }
+      }
+      // little dark pebbles that stay put on the ground as it rolls
+      ctx.fillStyle = PATH_LAYERS[0].color;
+      for (const path of world.paths) {
+        if (path.w < 1) continue;
+        const P = path.proj, n = path.pts.length;
+        for (let i = 3; i < n - 1; i += 7) {
+          if (P[i*4+2] < 0.25) continue;
+          const dx = P[i*4+4] - P[i*4-4], dy = P[i*4+5] - P[i*4-3], l = Math.hypot(dx, dy) || 1;
+          const off = base * 0.3 * P[i*4+3] * ((i % 2) ? 1 : -1);
+          ctx.fillRect(P[i*4] - dy / l * off - trailPix / 2, P[i*4+1] + dx / l * off - trailPix / 2, trailPix, trailPix);
+        }
+      }
+
+      // snap every pixel to the palette with hard edges: no blur, no soft anti-aliasing
+      const img = ctx.getImageData(0, 0, W, H), d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 110) { d[i + 3] = 0; continue; }
+        const a = d[i + 3] / 255;
+        const r0 = d[i] / a, g0 = d[i + 1] / a, b0 = d[i + 2] / a;
+        let best = 0, bestD = 1e9;
+        for (let c = 0; c < 3; c++) {
+          const C = TRAIL_PALETTE[c];
+          const dd = (r0 - C[0]) ** 2 + (g0 - C[1]) ** 2 + (b0 - C[2]) ** 2;
+          if (dd < bestD) { bestD = dd; best = c; }
+        }
+        const C = TRAIL_PALETTE[best];
+        d[i] = C[0]; d[i + 1] = C[1]; d[i + 2] = C[2]; d[i + 3] = 255;
+      }
+      if (settings.ground === "grass") paintGrass(world, d, W, H);
+      ctx.putImageData(img, 0, 0);
+    }
+
+
+    // ---------- 8-bit grass planet ----------
+    // Every pixel inside the planet's outline is traced back to a spot on the ground, so the
+    // grass tufts and flowers stay put and roll with the planet as you move.
+    const GRASS = [[38, 92, 36], [52, 122, 44], [74, 156, 60], [104, 188, 80], [146, 214, 106]];   // dark to light
+    const FLOWERS = [[250, 248, 236], [255, 214, 72], [240, 120, 150]];
+    const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - 0.47);
+    const LIGHT = norm([-0.45, -0.55, 0.7]);                  // sunlight from the top left
+    function hash3(x, y, z) {
+      let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+    function paintGrass(world, d, W, H) {
+      const r = world.crect, sl = slots[world.slot], R = radius * sl.s, m = world.rot;
+      const cx = stage.clientWidth / 2 + sl.x - r.left, cy = stage.clientHeight / 2 + sl.y - r.top;
+      // where each pixel lands on the ball only changes when the layout changes, so remember it
+      const key = W + "x" + H + ":" + R + ":" + persp + ":" + cx + ":" + cy;
+      if (world.grassKey !== key) {
+        world.grassKey = key;
+        const view = world.grassView = new Float32Array(W * H * 4);
+        for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+          const u = ((i + 0.5) * trailPix - cx) / R, v = ((j + 0.5) * trailPix - cy) / R;
+          let z = 0, x = 0, y = 0, rr = 0;
+          for (let it = 0; it < 3; it++) {                    // undo the perspective
+            const k = persp / (persp - z * R);
+            x = u / k; y = v / k; rr = x * x + y * y;
+            z = rr < 1 ? Math.sqrt(1 - rr) : 0;
+          }
+          const o = (j * W + i) * 4;
+          view[o] = x; view[o + 1] = y; view[o + 2] = z; view[o + 3] = rr;
+        }
+      }
+      const view = world.grassView;
+      const detail = 70;
+      for (let j = 0; j < H; j++) {
+        for (let i = 0; i < W; i++) {
+          const o = (j * W + i) * 4;
+          if (d[o + 3]) continue;                             // a trail is already here
+          if (view[o + 3] >= 1) continue;                    // outside the planet
+          const x = view[o], y = view[o + 1], z = view[o + 2];
+          let level;
+          {
+            // point in the planet's own coordinates (so it rolls with the planet)
+            const px = m[0][0]*x + m[1][0]*y + m[2][0]*z;
+            const py = m[0][1]*x + m[1][1]*y + m[2][1]*z;
+            const pz = m[0][2]*x + m[1][2]*y + m[2][2]*z;
+            // round-ball shading, darker toward the edge
+            const shade = 0.25 + 0.75 * Math.max(0, x * LIGHT[0] + y * LIGHT[1] + z * LIGHT[2]);
+            level = shade * 4.2 + BAYER[(j & 3) * 4 + (i & 3)] * 0.9;
+            // grass tufts and the odd flower, fixed to spots on the ground
+            const t = hash3(Math.floor(px * detail), Math.floor(py * detail), Math.floor(pz * detail));
+            if (t < 0.006 && z > 0.3) {
+              const f = FLOWERS[Math.floor(t * 500) % 3];
+              d[o] = f[0]; d[o + 1] = f[1]; d[o + 2] = f[2]; d[o + 3] = 255;
+              continue;
+            }
+            if (t < 0.07) level += 1;
+            else if (t > 0.93) level -= 1;
+          }
+          const c = GRASS[Math.max(0, Math.min(4, Math.round(level)))];
+          d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+        }
+      }
     }
 
     // ---------- swapping two planets along a shared ring ----------
@@ -619,12 +1063,9 @@
       if (i === focused || transition) return;
       cancelHover();
       closeMagnifier();
-      dragging = false;
-      stage.classList.remove("grabbing");
+      hero.speed = 0;
 
       const from = worlds[focused], to = worlds[i];
-      from.vel = { x: 0, y: 0 };
-      to.vel = { x: 0, y: 0 };
       const mainSpot = from.slot, otherSpot = to.slot;
 
       if (!reduceMotion) {
@@ -633,9 +1074,15 @@
         prepareTravel(to, E1, S1);
         transition = { from, to, S1, E1, start: performance.now() };
         worlds.forEach(w => w.label.classList.add("hidden"));
+        from.pathAlpha = to.pathAlpha = 0;
+        from.canvas.style.opacity = to.canvas.style.opacity = 0;
+        heroEl.classList.add("away");
       }
       from.slot = otherSpot;
       to.slot = mainSpot;
+      from.dirty = to.dirty = true;        // redraw both in their new spots (needed when the animation is skipped)
+      sizePathCanvas(from);
+      sizePathCanvas(to);
       focused = i;
       setActive();
       updateLabels();
@@ -649,6 +1096,7 @@
       if (T >= 1) {
         transition = null;
         from.dirty = to.dirty = true;
+        heroEl.classList.remove("away");
         positionLabels();
       }
     }
@@ -696,8 +1144,9 @@
         // main planet on the left, small planets in a column on the right
         const column = Math.min(300, w * 0.24);
         const top = 50, bottom = 20;
-        radius = Math.min((w - column) * 0.38, (h - top - bottom) / 2.3) * PLANET_SIZE;
-        const mini = Math.min(0.3, ((h - 60) / minis) / (radius * 2.9));
+        baseRadius = Math.min((w - column) * 0.38, (h - top - bottom) / 2.3);
+        radius = baseRadius * settings.size;
+        const mini = Math.min(0.3 * baseRadius, (h - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
         slots.push({ x: (w - column) / 2 - w / 2 + 30, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
         for (let k = 0; k < minis; k++) {
           slots.push({ x: w / 2 - column / 2, y: 30 + (h - 60) * (k + 0.5) / minis - h / 2 - 12, s: mini });
@@ -705,28 +1154,260 @@
       } else {
         // phones: main planet in the middle, small planets in a row at the bottom
         const top = 165, bottom = 150;
-        radius = Math.min(w * 0.37, (h - top - bottom) / 2.3) * PLANET_SIZE;
-        const mini = Math.min(0.3, (w / minis * 0.62) / (radius * 2.3));
+        baseRadius = Math.min(w * 0.37, (h - top - bottom) / 2.3);
+        radius = baseRadius * settings.size;
+        const mini = Math.min(0.3 * baseRadius, w / minis * 0.62 / 2.3) / radius;
         slots.push({ x: 0, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
         for (let k = 0; k < minis; k++) {
           slots.push({ x: w * (k + 0.5) / minis - w / 2, y: h / 2 - 95, s: mini });
         }
       }
-      const th = radius * Math.PI / ROWS * 0.78;
+      const th = radius * PHOTO_SIZE;
       stage.style.setProperty("--th", th + "px");
       stage.style.setProperty("--tw", th * 1.5 + "px");
       stage.style.setProperty("--gw", radius * 2.4 + "px");
-      stage.style.perspective = Math.max(2200, radius * 7) + "px";
-      worlds.forEach(world => world.dirty = true);
+      persp = Math.max(2200, radius * 7);
+      stage.style.perspective = persp + "px";
+      worlds.forEach(world => { world.dirty = true; sizePathCanvas(world); });
+      placeHero();
       if (!transition) positionLabels();
     }
 
-    function spin(world, dx, dy, speed = 0.005) {
-      const d = Math.hypot(dx, dy);
-      if (d < 1e-6) return;
-      world.rot = mulMM(axisAngle([-dy / d, dx / d, 0], d * speed), world.rot);
+    // roll a planet so its surface slides in screen direction (ux, uy) by an angle
+    function roll(world, ux, uy, angle) {
+      world.rot = mulMM(axisAngle([-uy, ux, 0], angle), world.rot);
       world.dirty = true;
     }
+
+    // ================= the character =================
+    // It always stands on the point of the main planet that faces you, and the planet
+    // rolls underneath it, so moving takes you around the whole world.
+    const heroEl = document.getElementById("hero");
+    const hero = { heading: 0, moveDir: 0, speed: 0, face: 1 };
+    const keys = {};
+
+    // ---------- 8-bit sprites, drawn from little pixel maps ----------
+    const SHEEP_BODY = [
+      "...WWW..WWW.....",
+      "..WWWWWWWWWWW...",
+      ".WWWWWWWWWWWWKK.",
+      "WWWWWWWWWWWKKKKK",
+      "WWWWWWWWWWWKEKKK",
+      "WWWWWWWWWWWKKKKK",
+      "wWWWWWWWWWWWKKK.",
+      ".wWWWWWWWWWWw...",
+      "..wwwwwwwwwww..."
+    ];
+    const SHEEP_LEGS_A = ["..K.K.....K.K...", "..K.K.....K.K..."];
+    const SHEEP_LEGS_B = ["...K.K...K.K....", "...K.K...K.K...."];
+    const SHEEP_COLORS = { W: "#f6f3ec", w: "#cdc5b6", K: "#2e2a27", E: "#ffffff" };
+    const CAR = [
+      "...RRRRRR...",
+      "..RYRRRRYR..",
+      "..RRRRRRRR..",
+      "TTRRRRRRRRTT",
+      "TTRBBBBBBRTT",
+      "TTRBBBBBBRTT",
+      "..RRRRRRRR..",
+      "..RrrrrrrR..",
+      "..RrrrrrrR..",
+      "..RrrrrrrR..",
+      "..RRRRRRRR..",
+      "..RBBBBBBR..",
+      "TTRRRRRRRRTT",
+      "TTRRRRRRRRTT",
+      "TTRRRRRRRRTT",
+      "..RLRRRRLR..",
+      "...RRRRRR..."
+    ];
+    const CAR_COLORS = { R: "#e0443a", r: "#b4342b", Y: "#ffe45c", B: "#92d6f7", T: "#1d1d1d", L: "#8a1010" };
+
+    function pixelArt(rows, colors, cls) {
+      // add a one-pixel dark outline so the sprite stands out on any photo
+      const H = rows.length + 2, W = rows[0].length + 2;
+      const at = (x, y) => (rows[y - 1] || "")[x - 1] || ".";
+      const needsOutline = (x, y) => [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dy]) => !".KT".includes(at(x + dx, y + dy)));
+      let rects = "";
+      for (let y = 0; y < H; y++) {
+        let x = 0;
+        while (x < W) {
+          let c = at(x, y);
+          if (c === ".") {
+            if (needsOutline(x, y)) c = "#";
+          }
+          if (c === ".") { x++; continue; }
+          let run = 1;
+          while (x + run < W) {
+            let n = at(x + run, y);
+            if (n === "." && needsOutline(x + run, y)) n = "#";
+            if (n !== c) break;
+            run++;
+          }
+          rects += `<rect x="${x}" y="${y}" width="${run}" height="1" fill="${c === "#" ? "#2b2420" : colors[c]}"/>`;
+          x += run;
+        }
+      }
+      return `<svg class="${cls}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges">${rects}</svg>`;
+    }
+    heroEl.innerHTML =
+      '<div class="shadow"></div>' +
+      pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_A], SHEEP_COLORS, "sheep frame-a") +
+      pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_B], SHEEP_COLORS, "sheep frame-b") +
+      pixelArt(CAR, CAR_COLORS, "car");
+
+    function placeHero() {
+      const sl = slots[0];
+      const k = persp / (persp - radius);             // the front of the planet is a little closer to you
+      const size = baseRadius * 0.3 * Math.min(1, settings.size) * k;
+      heroEl.style.width = heroEl.style.height = size + "px";
+      heroEl.style.left = (stage.clientWidth / 2 + sl.x * k - size / 2) + "px";
+      heroEl.style.top = (stage.clientHeight / 2 + sl.y * k - size / 2) + "px";
+      styleHero();
+    }
+
+    function styleHero() {
+      if (settings.character === "car") {
+        const snap = Math.round(hero.heading / (Math.PI / 4)) * (Math.PI / 4);   // 8 directions, like an old game
+        heroEl.style.transform = `rotate(${snap}rad)`;
+      } else {
+        heroEl.style.transform = `scaleX(${hero.face})`;   // the sheep just faces left or right
+      }
+    }
+
+    function setCharacter(kind) {
+      settings.character = kind === "car" ? "car" : "sheep";
+      heroEl.classList.toggle("is-car", settings.character === "car");
+      heroEl.classList.toggle("is-sheep", settings.character !== "car");
+      document.querySelectorAll("[data-char]").forEach(b => b.classList.toggle("on", b.dataset.char === settings.character));
+      saveSettings();
+      placeHero();
+    }
+
+    // turn smoothly from one angle toward another, the short way round
+    function turnToward(a, b, maxStep) {
+      let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      return a + Math.max(-maxStep, Math.min(maxStep, d));
+    }
+
+    // W A S D move up, left, down and right on the screen
+    function drive(dt) {
+      const ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+      const iy = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0);
+      const pressing = ix !== 0 || iy !== 0;
+      const car = settings.character === "car";
+      // same pace across the screen whatever the planet size
+      const top = (car ? 1.15 : 0.55) * settings.speed / settings.size;
+      const want = pressing ? Math.atan2(ix, -iy) : hero.heading;
+
+      if (car) {
+        // the car turns toward the direction you press and speeds up / slows down gradually
+        hero.heading = turnToward(hero.heading, want, 5 * dt);
+        const target = pressing ? top : 0;
+        const change = target - hero.speed;
+        hero.speed += Math.max(-2.6 * top * dt, Math.min(1.8 * top * dt, change));
+        hero.moveDir = hero.heading;
+      } else {
+        // the sheep trots straight in the direction you press
+        if (pressing) { hero.heading = want; hero.moveDir = want; }
+        if (ix) hero.face = ix > 0 ? 1 : -1;
+        hero.speed += ((pressing ? top : 0) - hero.speed) * Math.min(1, dt * 14);
+      }
+      if (hero.speed < 0.002 && !pressing) hero.speed = 0;
+
+      if (hero.speed > 0) {
+        // the ground slides the opposite way to where the character is going
+        roll(worlds[focused], -Math.sin(hero.moveDir), Math.cos(hero.moveDir), hero.speed * dt);
+        if (magnified) closeMagnifier();
+      }
+      const moving = hero.speed > 0.01;
+      heroEl.classList.toggle("moving", moving);
+      heroEl.style.setProperty("--step", Math.max(0.12, 0.32 / Math.max(0.6, settings.speed)) + "s");
+      styleHero();
+    }
+
+    const typing = e => e.target.closest && e.target.closest("input, textarea, select");
+    document.addEventListener("keydown", e => {
+      if (typing(e) || e.metaKey || e.ctrlKey) return;
+      if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
+        if (window.scrollY > window.innerHeight * 0.6) return;   // only on the planets screen
+        keys[e.code] = true;
+        e.preventDefault();
+      }
+      if (e.code === "KeyC" && window.scrollY < window.innerHeight * 0.6) {
+        setCharacter(settings.character === "car" ? "sheep" : "car");
+      }
+    });
+    document.addEventListener("keyup", e => { keys[e.code] = false; });
+    window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+    // on-screen pad for phones and tablets
+    document.querySelectorAll("#dpad [data-key]").forEach(btn => {
+      const k = btn.dataset.key;
+      const on = e => { e.preventDefault(); keys[k] = true; btn.classList.add("pressed"); };
+      const off = () => { keys[k] = false; btn.classList.remove("pressed"); };
+      btn.addEventListener("pointerdown", on);
+      btn.addEventListener("pointerup", off);
+      btn.addEventListener("pointerleave", off);
+      btn.addEventListener("pointercancel", off);
+      btn.addEventListener("contextmenu", e => e.preventDefault());
+    });
+
+    // ================= settings panel =================
+    const settings = { character: CHARACTER === "car" ? "car" : "sheep", size: PLANET_SIZE, speed: SPEED, ground: GROUND === "grass" ? "grass" : "clear" };
+    const SIZE_RANGE = [0.5, 10], SPEED_RANGE = [0.25, 10];
+    try {
+      const saved = JSON.parse(localStorage.getItem("planetSettings") || "{}");
+      if (saved.character === "car" || saved.character === "sheep") settings.character = saved.character;
+      if (saved.size >= SIZE_RANGE[0] && saved.size <= SIZE_RANGE[1]) settings.size = saved.size;
+      if (saved.speed >= SPEED_RANGE[0] && saved.speed <= SPEED_RANGE[1]) settings.speed = saved.speed;
+      if (saved.ground === "grass" || saved.ground === "clear") settings.ground = saved.ground;
+    } catch (e) {}
+    function saveSettings() {
+      try { localStorage.setItem("planetSettings", JSON.stringify(settings)); } catch (e) {}
+    }
+
+    // the sliders run on a curve so small values are as easy to pick as big ones
+    const toSlider = (v, [lo, hi]) => Math.round(1000 * Math.log(v / lo) / Math.log(hi / lo));
+    const fromSlider = (t, [lo, hi]) => lo * Math.pow(hi / lo, t / 1000);
+    const nice = v => v < 2 ? Math.round(v * 20) / 20 : v < 5 ? Math.round(v * 4) / 4 : Math.round(v * 2) / 2;
+
+    const panel = document.getElementById("settings");
+    document.getElementById("gear").addEventListener("click", () => panel.classList.toggle("open"));
+    document.querySelectorAll("[data-char]").forEach(b => b.addEventListener("click", () => setCharacter(b.dataset.char)));
+    const sizeInput = document.getElementById("sizeInput"), sizeOut = document.getElementById("sizeOut");
+    const speedInput = document.getElementById("speedInput"), speedOut = document.getElementById("speedOut");
+    function showSettings() {
+      sizeInput.value = toSlider(settings.size, SIZE_RANGE);
+      speedInput.value = toSlider(settings.speed, SPEED_RANGE);
+      sizeOut.textContent = settings.size + "\u00d7";
+      speedOut.textContent = settings.speed + "\u00d7";
+    }
+    sizeInput.addEventListener("input", () => {
+      settings.size = nice(fromSlider(+sizeInput.value, SIZE_RANGE));
+      sizeOut.textContent = settings.size + "\u00d7";
+      saveSettings();
+      if (!transition) layout();
+    });
+    speedInput.addEventListener("input", () => {
+      settings.speed = nice(fromSlider(+speedInput.value, SPEED_RANGE));
+      speedOut.textContent = settings.speed + "\u00d7";
+      saveSettings();
+    });
+    function setGround(kind) {
+      settings.ground = kind === "grass" ? "grass" : "clear";
+      document.querySelectorAll("[data-ground]").forEach(b => b.classList.toggle("on", b.dataset.ground === settings.ground));
+      worlds.forEach(w => w.pathsDirty = true);
+      saveSettings();
+    }
+    document.querySelectorAll("[data-ground]").forEach(b => b.addEventListener("click", () => setGround(b.dataset.ground)));
+    setGround(settings.ground);
+    document.getElementById("resetSettings").addEventListener("click", () => {
+      setGround(GROUND);
+      settings.size = PLANET_SIZE; settings.speed = SPEED;
+      showSettings(); saveSettings(); setCharacter(CHARACTER);
+      if (!transition) layout();
+    });
+    showSettings();
 
     document.getElementById("prevPlanet").addEventListener("click", () => goToPlanet(focused - 1));
     document.getElementById("nextPlanet").addEventListener("click", () => goToPlanet(focused + 1));
@@ -748,54 +1429,32 @@
       });
     }
 
-    // ---------- dragging the main planet / clicking small planets ----------
-    let dragging = false, last = null, moved = 0, pressedMini = null;
-    let idleDir = { x: 1, y: 0.25 };
+    // ---------- clicking small planets (the main planet is moved with W A S D) ----------
+    let moved = 0, pressedMini = null, mouse = { x: -1, y: -1 };
 
     stage.addEventListener("pointerdown", e => {
       if (magnified || transition) return;
       if (e.target.closest("button")) return;
       moved = 0;
       pressedMini = miniAt(e.clientX, e.clientY);
-      if (pressedMini) return;            // small planets are clicked, not dragged
-      dragging = true;
-      last = { x: e.clientX, y: e.clientY };
-      worlds[focused].vel = { x: 0, y: 0 };
-      stage.classList.add("grabbing");
-      if (e.pointerType === "mouse") cancelHover();
     });
     window.addEventListener("pointermove", e => {
+      mouse = { x: e.clientX, y: e.clientY };
       if (magnified) { checkMagnifierHover(e); return; }
-      if (!dragging) {
-        if (!transition) stage.classList.toggle("over-mini", !!miniAt(e.clientX, e.clientY));
-        if (pressedMini) moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
-        return;
-      }
-      const dx = e.clientX - last.x, dy = e.clientY - last.y;
-      last = { x: e.clientX, y: e.clientY };
-      const world = worlds[focused];
-      spin(world, dx, dy);
-      world.vel = { x: dx, y: dy };
-      moved += Math.abs(dx) + Math.abs(dy);
-      if (moved > 8) cancelHover();
+      if (!transition) stage.classList.toggle("over-mini", !!miniAt(e.clientX, e.clientY));
+      if (pressedMini) moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
     });
-    function endDrag(e) {
+    function endPress(e) {
       if (magnified && magnified.pointerType !== "mouse") closeMagnifier();
       if (pressedMini) {
         const target = pressedMini;
         pressedMini = null;
         if (moved < 10) goToPlanet(target.idx);
-        return;
       }
-      if (!dragging) return;
-      dragging = false;
-      stage.classList.remove("grabbing");
-      const v = worlds[focused].vel, s = Math.hypot(v.x, v.y);
-      if (s > 0.5) idleDir = { x: v.x / s, y: v.y / s };
       if (e && e.pointerType !== "mouse") cancelHover();
     }
-    window.addEventListener("pointerup", endDrag);
-    window.addEventListener("pointercancel", endDrag);
+    window.addEventListener("pointerup", endPress);
+    window.addEventListener("pointercancel", endPress);
 
     // ---------- hover to magnify ----------
     let hoverTile = null, hoverTimer = null, magnified = null;
@@ -807,7 +1466,6 @@
       tile.el.addEventListener("pointerenter", e => {
         if (magnified || transition || tile.el.classList.contains("back")) return;
         if (tile.world.idx !== focused) return;
-        if (dragging && e.pointerType === "mouse") return;
         cancelHover();
         hoverTile = tile;
         tile.el.classList.add("charging");
@@ -828,8 +1486,11 @@
     function magnify(tile, pointerType) {
       if (transition) return;
       tile.el.classList.remove("charging");
-      dragging = false;
-      stage.classList.remove("grabbing");
+      // if the planet rolled the photo out from under the mouse, don't open it
+      if (pointerType === "mouse") {
+        const under = document.elementFromPoint(mouse.x, mouse.y);
+        if (!under || !tile.el.contains(under)) { hoverTile = null; return; }
+      }
 
       const r = tile.el.getBoundingClientRect();
       const ratio = tile.img.naturalWidth ? tile.img.naturalWidth / tile.img.naturalHeight : 1.5;
@@ -852,6 +1513,7 @@
 
       magnified = { pointerType };
       hoverTile = null;
+      heroEl.classList.add("hidden-for-photo");
     }
 
     function checkMagnifierHover(e) {
@@ -863,34 +1525,33 @@
     }
     function closeMagnifier() {
       mag.classList.remove("open");
+      heroEl.classList.remove("hidden-for-photo");
       magnified = null;
     }
     mag.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") closeMagnifier(); });
     document.addEventListener("keydown", e => { if (e.key === "Escape" && magnified) closeMagnifier(); });
 
     // ---------- animation loop ----------
-    let frame = 0;
+    let frame = 0, lastTime = performance.now();
     function tick(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
       if (transition) {
         drawTransition(now);
       } else {
-        const world = worlds[focused];
-        if (!dragging && !magnified) {
-          const v = world.vel, s = Math.hypot(v.x, v.y);
-          if (s > 0.05) {
-            spin(world, v.x, v.y);       // momentum after a flick
-            v.x *= 0.95; v.y *= 0.95;
-          } else if (!reduceMotion && IDLE_SPEED > 0) {
-            spin(world, idleDir.x * IDLE_SPEED, idleDir.y * IDLE_SPEED);
-          }
+        drive(dt);
+        if (++frame % 120 === 0) worlds[focused].rot = orthonormalize(worlds[focused].rot);
+        for (const w of worlds) {
+          if (w.pathAlpha < 1) { w.pathAlpha = Math.min(1, w.pathAlpha + dt * 3); w.pathsDirty = true; }
+          if (w.dirty) drawResting(w);
+          if (w.pathsDirty) drawWorldPaths(w);
         }
-        if (++frame % 120 === 0) world.rot = orthonormalize(world.rot);
       }
-      if (!transition) for (const w of worlds) if (w.dirty) drawResting(w);
       requestAnimationFrame(tick);
     }
 
     layout();
+    setCharacter(settings.character);
     setActive();
     updateLabels();
     window.addEventListener("resize", layout);
