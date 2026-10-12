@@ -3,59 +3,165 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Name Photography</title>
+  <title>Sean O'Dono Photography</title>
   <meta name="description" content="Landscape and wildlife photography">
   <style>
     :root {
-      --bg: #111;
+      --bg: #0d0d0d;
       --text: #eee;
       --muted: #999;
       --accent: #c9a96e;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
     body {
       background: var(--bg);
       color: var(--text);
       font-family: Georgia, "Times New Roman", serif;
       line-height: 1.6;
     }
-    header {
-      text-align: center;
-      padding: 4rem 1rem 2rem;
-    }
-    header h1 {
-      font-weight: normal;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      font-size: clamp(1.6rem, 5vw, 2.6rem);
-    }
-    header p { color: var(--muted); margin-top: 0.5rem; }
+
+    /* ---------- Top navigation ---------- */
     nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
       display: flex;
       justify-content: center;
       gap: 1.5rem;
       flex-wrap: wrap;
-      padding: 1rem;
-      position: sticky;
-      top: 0;
-      background: rgba(17, 17, 17, 0.92);
-      z-index: 10;
+      padding: 0.9rem 1rem;
+      background: linear-gradient(rgba(13,13,13,0.9), rgba(13,13,13,0));
+      z-index: 50;
     }
     nav a {
       color: var(--text);
       text-decoration: none;
       font-family: system-ui, sans-serif;
-      font-size: 0.85rem;
-      letter-spacing: 0.1em;
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
     }
     nav a:hover { color: var(--accent); }
-    section {
+
+    /* ---------- Home: photo sphere ---------- */
+    #home {
+      position: relative;
+      height: 100vh;
+      height: 100svh;
+      overflow: hidden;
+    }
+    #stage {
+      position: absolute;
+      inset: 0;
+      perspective-origin: 50% 50%;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #stage.grabbing { cursor: grabbing; }
+    .tile {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: var(--tw);
+      height: var(--th);
+      margin-left: calc(var(--tw) / -2);
+      margin-top: calc(var(--th) / -2);
+      will-change: transform, opacity;
+    }
+    .tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+      background: #222;
+      transition: filter 0.2s;
+    }
+    .tile.back { pointer-events: none; }
+    .tile:not(.back):hover img { filter: brightness(1.15); }
+    /* progress bar that fills during the 1.5s hover */
+    .tile::after {
+      content: "";
+      position: absolute;
+      left: 0; bottom: 0;
+      height: 3px;
+      width: 0;
+      background: var(--accent);
+    }
+    .tile.charging::after {
+      width: 100%;
+      transition: width 1.5s linear;
+    }
+
+    .home-title {
+      position: absolute;
+      top: 3.6rem;
+      left: 0; right: 0;
+      text-align: center;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .home-title h1 {
+      font-weight: normal;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-size: clamp(1.3rem, 4vw, 2.2rem);
+    }
+    .home-title p { color: var(--muted); font-size: 0.95rem; }
+    .hint {
+      position: absolute;
+      bottom: 1.2rem;
+      left: 0; right: 0;
+      text-align: center;
+      color: var(--muted);
+      font-family: system-ui, sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      z-index: 5;
+    }
+    .hint a {
+      display: inline-block;
+      margin-top: 0.4rem;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 1.3rem;
+    }
+
+    /* ---------- Magnified photo ---------- */
+    #magnifier {
+      position: fixed;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      transition: left 0.35s ease, top 0.35s ease, width 0.35s ease,
+                  height 0.35s ease, opacity 0.25s ease;
+    }
+    #magnifier.open { opacity: 1; pointer-events: auto; }
+    #magnifier img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    #magnifier .caption {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: 1.5rem 1rem 0.7rem;
+      background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      font-size: 0.95rem;
+    }
+    #magnifier .caption:empty { display: none; }
+
+    /* ---------- Gallery sections ---------- */
+    section.content {
       max-width: 1400px;
       margin: 0 auto;
-      padding: 3rem 1rem;
+      padding: 4rem 1rem 3rem;
     }
-    section h2 {
+    section.content h2 {
       font-weight: normal;
       font-size: 1.4rem;
       margin-bottom: 1.5rem;
@@ -81,11 +187,7 @@
       grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
       gap: 1rem;
     }
-    .videos iframe {
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      border: 0;
-    }
+    .videos iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; }
     #about p { max-width: 650px; color: #ccc; }
     footer {
       text-align: center;
@@ -93,23 +195,20 @@
       padding: 3rem 1rem;
       font-size: 0.85rem;
     }
-    /* Lightbox */
+
+    /* ---------- Gallery lightbox ---------- */
     #lightbox {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.95);
+      background: rgba(0,0,0,0.95);
       z-index: 100;
       align-items: center;
       justify-content: center;
       flex-direction: column;
     }
     #lightbox.open { display: flex; }
-    #lightbox img {
-      max-width: 95vw;
-      max-height: 85vh;
-      object-fit: contain;
-    }
+    #lightbox img { max-width: 95vw; max-height: 85vh; object-fit: contain; }
     #lightbox .caption { color: var(--muted); margin-top: 1rem; }
     #lightbox button {
       position: absolute;
@@ -123,48 +222,62 @@
     #close { top: 0.5rem; right: 1rem; }
     #prev { left: 0.5rem; }
     #next { right: 0.5rem; }
+
     @media (max-width: 500px) {
-      .videos { grid-template-columns: 1fr; }
-      .gallery { grid-template-columns: 1fr; }
+      .videos, .gallery { grid-template-columns: 1fr; }
+      nav { gap: 1rem; }
     }
   </style>
 </head>
 <body>
 
-  <header>
-    <h1>Your Name</h1>
-    <p>Landscape &amp; Wildlife Photography</p>
-  </header>
-
   <nav>
+    <a href="#home">Home</a>
     <a href="#landscape">Landscape</a>
     <a href="#wildlife">Wildlife</a>
     <a href="#video">Video</a>
     <a href="#about">About</a>
   </nav>
 
-  <section id="landscape">
+  <section id="home">
+    <div id="stage"></div>
+    <div class="home-title">
+      <h1>Sean O'Dono</h1>
+      <p>Landscape &amp; Wildlife Photography</p>
+    </div>
+    <div class="hint">
+      Drag to spin &middot; Hover a photo to enlarge<br>
+      <a href="#landscape" aria-label="Scroll to galleries">&#8964;</a>
+    </div>
+  </section>
+
+  <div id="magnifier">
+    <img src="" alt="">
+    <div class="caption"></div>
+  </div>
+
+  <section class="content" id="landscape">
     <h2>Landscape</h2>
     <div class="gallery" data-category="landscape"></div>
   </section>
 
-  <section id="wildlife">
+  <section class="content" id="wildlife">
     <h2>Wildlife</h2>
     <div class="gallery" data-category="wildlife"></div>
   </section>
 
-  <section id="video">
+  <section class="content" id="video">
     <h2>Video</h2>
     <div class="videos"></div>
   </section>
 
-  <section id="about">
+  <section class="content" id="about">
     <h2>About</h2>
     <p>Write a few sentences about yourself here: where you shoot, what draws you to landscapes and wildlife, and what gear you use if you like.</p>
     <p style="margin-top:1rem">Contact: <a href="mailto:you@example.com" style="color:var(--accent)">you@example.com</a></p>
   </section>
 
-  <footer>© <span id="year"></span> Your Name. All rights reserved.</footer>
+  <footer>&copy; <span id="year"></span> Sean O'Dono. All rights reserved.</footer>
 
   <div id="lightbox">
     <button id="close" aria-label="Close">&times;</button>
@@ -178,6 +291,7 @@
     // ============================================================
     //  EDIT THIS LIST to add your photos.
     //  Put image files in the "images" folder next to this file.
+    //  Every photo here appears on the sphere AND in its gallery.
     // ============================================================
     const photos = [
       { file: "images/landscape1.jpg", category: "landscape", caption: "Sunset over the hills" },
@@ -194,9 +308,235 @@
       // "dQw4w9WgXcQ",
     ];
 
-    // ---------- You don't need to edit below this line ----------
+    // ---------- Sphere settings (optional to tweak) ----------
+    const MIN_TILES = 40;        // photos repeat until the sphere has at least this many
+    const HOVER_DELAY = 500;    // ms of hovering before a photo enlarges
+    const IDLE_SPEED = 0.35;     // gentle spin when nobody is touching it (0 = still)
+
+    // ================= You don't need to edit below =================
     document.getElementById("year").textContent = new Date().getFullYear();
 
+    // ---------- small vector / matrix helpers ----------
+    const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+    const cross = (a, b) => [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+    const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0]/l, a[1]/l, a[2]/l]; };
+    const mulMV = (m, v) => [dot(m[0], v), dot(m[1], v), dot(m[2], v)];
+    const mulMM = (a, b) => a.map(r => [0, 1, 2].map(j => r[0]*b[0][j] + r[1]*b[1][j] + r[2]*b[2][j]));
+    function axisAngle([x, y, z], t) {
+      const c = Math.cos(t), s = Math.sin(t), C = 1 - c;
+      return [
+        [x*x*C + c,   x*y*C - z*s, x*z*C + y*s],
+        [y*x*C + z*s, y*y*C + c,   y*z*C - x*s],
+        [z*x*C - y*s, z*y*C + x*s, z*z*C + c]
+      ];
+    }
+    function orthonormalize(m) {
+      const a = norm(m[0]);
+      const d = dot(a, m[1]);
+      const b = norm([m[1][0] - a[0]*d, m[1][1] - a[1]*d, m[1][2] - a[2]*d]);
+      return [a, b, cross(a, b)];
+    }
+
+    // ---------- build the sphere ----------
+    const stage = document.getElementById("stage");
+    let tiles = [];
+    let radius = 300;
+    let rot = axisAngle([1, 0, 0], -0.35);   // start with a slight tilt
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function buildSphere() {
+      if (!photos.length) return;
+      const n = Math.max(MIN_TILES, photos.length);
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < n; i++) {
+        // evenly spread points on a sphere (Fibonacci lattice)
+        const y = 1 - ((i + 0.5) / n) * 2;
+        const r = Math.sqrt(1 - y * y);
+        const th = golden * i;
+        const p = [Math.cos(th) * r, y, Math.sin(th) * r];
+        // orient each photo so it lies flat on the sphere's surface
+        let down = [-p[0]*p[1], 1 - p[1]*p[1], -p[2]*p[1]];
+        if (Math.hypot(...down) < 1e-3) down = [1, 0, 0];
+        down = norm(down);
+        const right = cross(down, p);
+
+        const photo = photos[i % photos.length];
+        const el = document.createElement("div");
+        el.className = "tile";
+        const img = new Image();
+        img.src = photo.file;
+        img.alt = photo.caption;
+        img.draggable = false;
+        el.appendChild(img);
+        stage.appendChild(el);
+        const tile = { el, img, p, right, down, photo };
+        tiles.push(tile);
+        attachHover(tile);
+      }
+      sizeSphere();
+    }
+
+    function sizeSphere() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      radius = Math.min(w, h) * (w < 600 ? 0.36 : 0.32);
+      const tw = Math.min(radius * Math.sqrt(4 * Math.PI / tiles.length) * 0.9, radius * 0.7);
+      stage.style.setProperty("--tw", tw + "px");
+      stage.style.setProperty("--th", (tw * 2 / 3) + "px");
+      stage.style.perspective = (radius * 4) + "px";
+      render();
+    }
+
+    function render() {
+      for (const t of tiles) {
+        const a = mulMV(rot, t.right), b = mulMV(rot, t.down), c = mulMV(rot, t.p);
+        t.el.style.transform =
+          `matrix3d(${a[0]},${a[1]},${a[2]},0,${b[0]},${b[1]},${b[2]},0,` +
+          `${c[0]},${c[1]},${c[2]},0,${c[0]*radius},${c[1]*radius},${c[2]*radius},1)`;
+        const facing = c[2];                     // 1 = facing you, -1 = far side
+        t.el.style.zIndex = Math.round((facing + 1) * 1000);
+        t.el.style.opacity = facing > 0 ? 0.55 + 0.45 * facing : 0.1 + 0.2 * (1 + facing);
+        const isBack = facing < 0.1;
+        if (isBack !== t.el.classList.contains("back")) {
+          t.el.classList.toggle("back", isBack);
+          if (isBack && hoverTile === t) cancelHover();
+        }
+      }
+    }
+
+    function spin(dx, dy, speed = 0.005) {
+      const d = Math.hypot(dx, dy);
+      if (d < 1e-6) return;
+      rot = mulMM(axisAngle([-dy / d, dx / d, 0], d * speed), rot);
+    }
+
+    // ---------- dragging ----------
+    let dragging = false, last = null, vel = { x: 0, y: 0 }, moved = 0;
+    let idleDir = { x: 1, y: 0.25 };
+
+    stage.addEventListener("pointerdown", e => {
+      if (magnified) return;
+      dragging = true;
+      moved = 0;
+      last = { x: e.clientX, y: e.clientY };
+      vel = { x: 0, y: 0 };
+      stage.classList.add("grabbing");
+      if (e.pointerType === "mouse") cancelHover();
+    });
+    window.addEventListener("pointermove", e => {
+      if (magnified) { checkMagnifierHover(e); return; }
+      if (!dragging) return;
+      const dx = e.clientX - last.x, dy = e.clientY - last.y;
+      last = { x: e.clientX, y: e.clientY };
+      spin(dx, dy);
+      vel = { x: dx, y: dy };
+      moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 8) cancelHover();
+    });
+    function endDrag(e) {
+      if (magnified && magnified.pointerType !== "mouse") closeMagnifier();
+      if (!dragging) return;
+      dragging = false;
+      stage.classList.remove("grabbing");
+      const s = Math.hypot(vel.x, vel.y);
+      if (s > 0.5) idleDir = { x: vel.x / s, y: vel.y / s };   // keep spinning the way it was thrown
+      if (e && e.pointerType !== "mouse") cancelHover();
+    }
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+
+    // ---------- hover to magnify ----------
+    let hoverTile = null, hoverTimer = null, magnified = null;
+    const mag = document.getElementById("magnifier");
+    const magImg = mag.querySelector("img");
+    const magCap = mag.querySelector(".caption");
+
+    function attachHover(tile) {
+      tile.el.addEventListener("pointerenter", e => {
+        if (magnified || tile.el.classList.contains("back")) return;
+        if (dragging && e.pointerType === "mouse") return;
+        cancelHover();
+        hoverTile = tile;
+        tile.el.classList.add("charging");
+        hoverTimer = setTimeout(() => magnify(tile, e.pointerType), HOVER_DELAY);
+      });
+      tile.el.addEventListener("pointerleave", e => {
+        if (hoverTile === tile && e.pointerType === "mouse") cancelHover();
+      });
+    }
+
+    function cancelHover() {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+      if (hoverTile) hoverTile.el.classList.remove("charging");
+      hoverTile = null;
+    }
+
+    function magnify(tile, pointerType) {
+      tile.el.classList.remove("charging");
+      dragging = false;
+      stage.classList.remove("grabbing");
+
+      const r = tile.el.getBoundingClientRect();
+      const ratio = tile.img.naturalWidth ? tile.img.naturalWidth / tile.img.naturalHeight : 1.5;
+      let w = Math.min(innerWidth * 0.7, 1000), h = w / ratio;
+      if (h > innerHeight * 0.7) { h = innerHeight * 0.7; w = h * ratio; }
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const left = Math.max(12, Math.min(cx - w / 2, innerWidth - w - 12));
+      const top = Math.max(12, Math.min(cy - h / 2, innerHeight - h - 12));
+
+      magImg.src = tile.photo.file;
+      magImg.alt = tile.photo.caption;
+      magCap.textContent = tile.photo.caption || "";
+
+      // start at the tile's size and position, then grow
+      mag.style.transition = "none";
+      Object.assign(mag.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+      mag.offsetWidth;   // apply the starting size before animating
+      mag.style.transition = "";
+      mag.classList.add("open");
+      Object.assign(mag.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
+
+      magnified = { pointerType };
+      hoverTile = null;
+    }
+
+    function checkMagnifierHover(e) {
+      if (!magnified || magnified.pointerType !== "mouse") return;
+      const r = mag.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+        closeMagnifier();
+      }
+    }
+
+    function closeMagnifier() {
+      mag.classList.remove("open");
+      magnified = null;
+    }
+    mag.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") closeMagnifier(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && magnified) closeMagnifier(); });
+
+    // ---------- animation loop ----------
+    let frame = 0;
+    function tick() {
+      if (!dragging && !magnified && !hoverTile) {
+        const s = Math.hypot(vel.x, vel.y);
+        if (s > 0.05) {
+          spin(vel.x, vel.y);          // momentum after a flick
+          vel.x *= 0.95; vel.y *= 0.95;
+        } else if (!reduceMotion && IDLE_SPEED > 0) {
+          spin(idleDir.x * IDLE_SPEED, idleDir.y * IDLE_SPEED);
+        }
+      }
+      if (++frame % 120 === 0) rot = orthonormalize(rot);
+      render();
+      requestAnimationFrame(tick);
+    }
+
+    buildSphere();
+    window.addEventListener("resize", sizeSphere);
+    requestAnimationFrame(tick);
+
+    // ---------- galleries ----------
     document.querySelectorAll(".gallery").forEach(gallery => {
       const cat = gallery.dataset.category;
       photos.filter(p => p.category === cat).forEach(p => {
@@ -214,18 +554,18 @@
       videoBox.innerHTML = '<p style="color:#999">Videos coming soon.</p>';
     }
     youtubeVideos.forEach(id => {
-      const frame = document.createElement("iframe");
-      frame.src = "https://www.youtube-nocookie.com/embed/" + id;
-      frame.allowFullscreen = true;
-      frame.loading = "lazy";
-      videoBox.appendChild(frame);
+      const frameEl = document.createElement("iframe");
+      frameEl.src = "https://www.youtube-nocookie.com/embed/" + id;
+      frameEl.allowFullscreen = true;
+      frameEl.loading = "lazy";
+      videoBox.appendChild(frameEl);
     });
 
+    // ---------- gallery lightbox ----------
     const lb = document.getElementById("lightbox");
     const lbImg = lb.querySelector("img");
     const lbCap = lb.querySelector(".caption");
     let current = 0;
-
     function openLightbox(i) {
       current = i;
       lbImg.src = photos[i].file;
@@ -235,7 +575,6 @@
     }
     function closeLightbox() { lb.classList.remove("open"); }
     function step(d) { openLightbox((current + d + photos.length) % photos.length); }
-
     document.getElementById("close").onclick = closeLightbox;
     document.getElementById("prev").onclick = e => { e.stopPropagation(); step(-1); };
     document.getElementById("next").onclick = e => { e.stopPropagation(); step(1); };
