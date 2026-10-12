@@ -7,10 +7,11 @@
   <meta name="description" content="Landscape and wildlife photography">
   <style>
     :root {
-      --bg: #0d0d0d;
-      --text: #eee;
-      --muted: #999;
-      --accent: #c9a96e;
+      --bg: #ffffff;
+      --text: #1a1a1a;
+      --muted: #777;
+      --accent: #b08a4a;
+      --placeholder: #eee;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
@@ -30,7 +31,7 @@
       gap: 1.5rem;
       flex-wrap: wrap;
       padding: 0.9rem 1rem;
-      background: linear-gradient(rgba(13,13,13,0.9), rgba(13,13,13,0));
+      background: linear-gradient(rgba(255,255,255,0.95), rgba(255,255,255,0));
       z-index: 50;
     }
     nav a {
@@ -76,11 +77,12 @@
       object-fit: cover;
       display: block;
       pointer-events: none;
-      background: #222;
+      background: var(--placeholder);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
       transition: filter 0.2s;
     }
     .tile.back { pointer-events: none; }
-    .tile:not(.back):hover img { filter: brightness(1.15); }
+    .tile:not(.back):hover img { filter: brightness(1.08); }
     /* progress bar that fills during the 1.5s hover */
     .tile::after {
       content: "";
@@ -92,7 +94,7 @@
     }
     .tile.charging::after {
       width: 100%;
-      transition: width 1.5s linear;
+      transition: width var(--hover-delay, 0.5s) linear;
     }
 
     .home-title {
@@ -135,7 +137,7 @@
       z-index: 200;
       opacity: 0;
       pointer-events: none;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
       transition: left 0.35s ease, top 0.35s ease, width 0.35s ease,
                   height 0.35s ease, opacity 0.25s ease;
     }
@@ -151,6 +153,7 @@
       left: 0; right: 0; bottom: 0;
       padding: 1.5rem 1rem 0.7rem;
       background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      color: #fff;
       font-size: 0.95rem;
     }
     #magnifier .caption:empty { display: none; }
@@ -165,7 +168,7 @@
       font-weight: normal;
       font-size: 1.4rem;
       margin-bottom: 1.5rem;
-      border-bottom: 1px solid #333;
+      border-bottom: 1px solid #ddd;
       padding-bottom: 0.5rem;
     }
     .gallery {
@@ -179,7 +182,7 @@
       object-fit: cover;
       cursor: zoom-in;
       transition: opacity 0.2s;
-      background: #222;
+      background: var(--placeholder);
     }
     .gallery img:hover { opacity: 0.85; }
     .videos {
@@ -188,7 +191,8 @@
       gap: 1rem;
     }
     .videos iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; }
-    #about p { max-width: 650px; color: #ccc; }
+    #about p { max-width: 650px; color: #444; }
+    .empty { color: var(--muted); }
     footer {
       text-align: center;
       color: var(--muted);
@@ -201,7 +205,7 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.95);
+      background: rgba(255,255,255,0.97);
       z-index: 100;
       align-items: center;
       justify-content: center;
@@ -214,7 +218,7 @@
       position: absolute;
       background: none;
       border: none;
-      color: #fff;
+      color: var(--text);
       font-size: 2.5rem;
       cursor: pointer;
       padding: 1rem;
@@ -294,10 +298,10 @@
     //  Every photo here appears on the sphere AND in its gallery.
     // ============================================================
     const photos = [
-      { file: "images/landscape1.jpg", category: "landscape", caption: "Sunset over the hills" },
-      { file: "images/landscape2.jpg", category: "landscape", caption: "Coastal morning" },
-      { file: "images/landscape3.jpg",  category: "wildlife",  caption: "Red-tailed hawk" },
-      { file: "images/landscape4.jpg",  category: "wildlife",  caption: "Deer at dusk" },
+      { file: "images/landscape1.jpg", category: "landscape", caption: "" },
+      { file: "images/landscape2.jpg", category: "landscape", caption: "" },
+      { file: "images/landscape3.jpg", category: "landscape", caption: "" },
+      { file: "images/landscape4.jpg", category: "landscape", caption: "" },
     ];
 
     // ============================================================
@@ -309,12 +313,13 @@
     ];
 
     // ---------- Sphere settings (optional to tweak) ----------
-    const MIN_TILES = 40;        // photos repeat until the sphere has at least this many
-    const HOVER_DELAY = 500;    // ms of hovering before a photo enlarges
-    const IDLE_SPEED = 0.35;     // gentle spin when nobody is touching it (0 = still)
+    const MIN_TILES = 80;        // photos repeat until the sphere has at least this many
+    const HOVER_DELAY = 500;     // ms of hovering before a photo enlarges (500 = 0.5 sec)
+    const IDLE_SPEED = 0;        // spin when nobody is touching it (0 = stays still)
 
     // ================= You don't need to edit below =================
     document.getElementById("year").textContent = new Date().getFullYear();
+    document.documentElement.style.setProperty("--hover-delay", HOVER_DELAY / 1000 + "s");
 
     // ---------- small vector / matrix helpers ----------
     const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
@@ -354,11 +359,6 @@
         const r = Math.sqrt(1 - y * y);
         const th = golden * i;
         const p = [Math.cos(th) * r, y, Math.sin(th) * r];
-        // orient each photo so it lies flat on the sphere's surface
-        let down = [-p[0]*p[1], 1 - p[1]*p[1], -p[2]*p[1]];
-        if (Math.hypot(...down) < 1e-3) down = [1, 0, 0];
-        down = norm(down);
-        const right = cross(down, p);
 
         const photo = photos[i % photos.length];
         const el = document.createElement("div");
@@ -369,7 +369,7 @@
         img.draggable = false;
         el.appendChild(img);
         stage.appendChild(el);
-        const tile = { el, img, p, right, down, photo };
+        const tile = { el, img, p, photo };
         tiles.push(tile);
         attachHover(tile);
       }
@@ -379,7 +379,7 @@
     function sizeSphere() {
       const w = stage.clientWidth, h = stage.clientHeight;
       radius = Math.min(w, h) * (w < 600 ? 0.36 : 0.32);
-      const tw = Math.min(radius * Math.sqrt(4 * Math.PI / tiles.length) * 0.9, radius * 0.7);
+      const tw = Math.min(radius * Math.sqrt(4 * Math.PI / tiles.length) * 0.8, radius * 0.6);
       stage.style.setProperty("--tw", tw + "px");
       stage.style.setProperty("--th", (tw * 2 / 3) + "px");
       stage.style.perspective = (radius * 4) + "px";
@@ -388,10 +388,9 @@
 
     function render() {
       for (const t of tiles) {
-        const a = mulMV(rot, t.right), b = mulMV(rot, t.down), c = mulMV(rot, t.p);
-        t.el.style.transform =
-          `matrix3d(${a[0]},${a[1]},${a[2]},0,${b[0]},${b[1]},${b[2]},0,` +
-          `${c[0]},${c[1]},${c[2]},0,${c[0]*radius},${c[1]*radius},${c[2]*radius},1)`;
+        const c = mulMV(rot, t.p);
+        // move each photo to its spot on the sphere but keep it upright and facing you
+        t.el.style.transform = `translate3d(${c[0]*radius}px,${c[1]*radius}px,${c[2]*radius}px)`;
         const facing = c[2];                     // 1 = facing you, -1 = far side
         t.el.style.zIndex = Math.round((facing + 1) * 1000);
         t.el.style.opacity = facing > 0 ? 0.55 + 0.45 * facing : 0.1 + 0.2 * (1 + facing);
@@ -539,7 +538,9 @@
     // ---------- galleries ----------
     document.querySelectorAll(".gallery").forEach(gallery => {
       const cat = gallery.dataset.category;
-      photos.filter(p => p.category === cat).forEach(p => {
+      const inCat = photos.filter(p => p.category === cat);
+      if (!inCat.length) gallery.outerHTML = '<p class="empty">Photos coming soon.</p>';
+      inCat.forEach(p => {
         const img = document.createElement("img");
         img.src = p.file;
         img.alt = p.caption;
@@ -551,7 +552,7 @@
 
     const videoBox = document.querySelector(".videos");
     if (youtubeVideos.length === 0) {
-      videoBox.innerHTML = '<p style="color:#999">Videos coming soon.</p>';
+      videoBox.innerHTML = '<p class="empty">Videos coming soon.</p>';
     }
     youtubeVideos.forEach(id => {
       const frameEl = document.createElement("iframe");
