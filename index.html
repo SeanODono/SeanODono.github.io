@@ -323,7 +323,7 @@
 
   <section class="content" id="about">
     <h2>About</h2>
-    <p>I love shooting in the countryside of West Cork aswell as the sunset cliffs of Isla Vista. I will always take the chance to photograph my friends band shows or wildlife.</p>
+    <p>I love shooting in the countryside of West Cork as well as the sunset cliffs of Isla Vista. I will always take the chance to photograph my friends' band shows or wildlife.</p>
     <div class="contact">
       <div><span class="contact-label">Email</span><a href="mailto:sean@navonodo.com">sean@navonodo.com</a></div>
       <div><span class="contact-label">Instagram</span><a href="https://www.instagram.com/seen.through.sean/" target="_blank" rel="noopener">@seen.through.sean</a></div>
@@ -400,11 +400,17 @@
     const MIN_TILES = 100;          // photos repeat until each planet has at least this many
     const HOVER_DELAY = 500;        // ms of hovering before a photo enlarges (500 = 0.5 sec)
     const IDLE_SPEED = 0;           // spin when nobody is touching it (0 = stays still)
-    const TRANSITION_TIME = 4000;   // ms for the planets to swap places
-    const TUBE_SIZE = 0.3;          // thickness of the ring's tube, compared to the main planet
+    const TRANSITION_TIME = 1500;   // ms for the planets to swap places
+    const TUBE_SIZE = 0.1;        // thickness of the ring's tube, compared to the main planet
     const PLANET_SIZE = 1;          // make the main planet bigger or smaller (1.1 = 10% bigger)
 
     // ================= You don't need to edit below =================
+    // Always open at the top (the planets), even if the link has #about etc. or the browser remembers a scroll spot
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    window.addEventListener("load", () => window.scrollTo({ top: 0, behavior: "instant" }));
+
     document.getElementById("year").textContent = new Date().getFullYear();
     document.documentElement.style.setProperty("--hover-delay", HOVER_DELAY / 1000 + "s");
 
