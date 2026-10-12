@@ -47,11 +47,14 @@
     /* ---------- Home: planets ---------- */
     #home {
       position: relative;
-      height: 100vh;
+      height: 100vh;               /* the script makes this taller when a big planet needs the room */
       height: 100svh;
       min-height: 560px;
       overflow: hidden;
     }
+    #gear, #settings, #dpad, .arrow { transition: opacity 0.2s; }
+    body.past-planets #gear, body.past-planets #settings,
+    body.past-planets #dpad, body.past-planets .arrow { opacity: 0; pointer-events: none; }
     #stage {
       position: absolute;
       inset: 0;
@@ -162,7 +165,7 @@
 
     /* ---------- settings ---------- */
     #gear {
-      position: absolute;
+      position: fixed;
       left: 1rem; bottom: 1rem;
       width: 2.4rem; height: 2.4rem;
       border-radius: 50%;
@@ -177,7 +180,7 @@
     }
     #gear:hover { color: var(--text); transform: rotate(60deg); }
     #settings {
-      position: absolute;
+      position: fixed;
       left: 1rem; bottom: 4rem;
       width: 15rem;
       padding: 1rem;
@@ -227,7 +230,7 @@
     /* ---------- touch pad ---------- */
     #dpad {
       display: none;
-      position: absolute;
+      position: fixed;
       left: 50%; bottom: 1rem;
       transform: translateX(-50%);
       gap: 0.5rem;
@@ -374,7 +377,7 @@
     #stage { overflow: hidden; }
 
     .arrow {
-      position: absolute;
+      position: fixed;
       top: 50%;
       transform: translateY(-50%);
       background: none;
@@ -503,9 +506,9 @@
       .home-title { top: 4.4rem; padding: 0.2rem 1rem 0.45rem; }
       .hint { display: none; }
       .arrow { font-size: 2rem; padding: 0.5rem; }
-      #gear { bottom: 9.5rem; }
-      #settings { bottom: 12.5rem; }
-      #dpad { bottom: 9.3rem; }
+      #gear { bottom: 4.3rem; }
+      #settings { bottom: 7.3rem; }
+      #dpad { bottom: 1rem; }
     }
   </style>
 </head>
@@ -519,7 +522,7 @@
       <h1>Sean O'Dono</h1>
       <div id="planet-name"></div>
       <div id="planet-sub"></div>
-      <div class="hint"><b>W A S D</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
+      <div class="hint"><b>W A S D</b> or <b>arrow keys</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
     </div>
 
     <!-- the character: an 8-bit sheep or car (drawn by the script below) -->
@@ -580,7 +583,7 @@
       <canvas id="portal" width="16" height="16"></canvas>
       <div id="sceneHero"></div>
     </div>
-    <div id="sceneHint"><b>W A S D</b> to walk around &middot; walk off the photo or into the portal to leave</div>
+    <div id="sceneHint"><b>W A S D</b> or <b>arrow keys</b> to walk around &middot; walk off the photo or into the portal to leave</div>
   </div>
 
   <div id="magnifier">
@@ -1470,44 +1473,70 @@
     }
 
     // ---------- size and position of the spots ----------
+    // The planet screen grows taller when the planet needs it, so the whole planet always fits
+    // (scroll down to see the bottom of a big planet). Sizes are still based on the window.
+    const homeEl = document.getElementById("home");
     function layout() {
       const band = document.querySelector(".home-title");
-      stage.style.top = Math.ceil(band.offsetTop + band.offsetHeight) + "px";   // planets start below the title
-      const w = stage.clientWidth, h = stage.clientHeight;
-      const narrow = w < 700 || h > w * 1.1;
+      const bandBottom = Math.ceil(band.offsetTop + band.offsetHeight);
+      stage.style.top = bandBottom + "px";                      // planets start below the title
+      const w = stage.clientWidth;
+      const vh = Math.max(320, window.innerHeight - bandBottom); // the part of the planet screen you see at once
+      const narrow = w < 700 || vh > w * 1.1;
       const minis = worlds.length - 1;
+      const top = narrow ? 15 : 20, bottom = narrow ? 150 : 20;
+      baseRadius = narrow ? Math.min(w * 0.37, (vh - top - bottom) / 2.3)
+                          : Math.min((w - Math.min(300, w * 0.24)) * 0.38, (vh - top - bottom) / 2.3);
+      radius = baseRadius * settings.size * zoom;
+      persp = Math.max(2200, radius * 7);
+      // how far the planet reaches from its centre on screen, photo frames included
+      const reach = radius * persp / (persp - radius) * 1.1;
+      const H = Math.max(vh, Math.ceil(reach * 2 + top + bottom));
+      homeEl.style.height = (bandBottom + H) + "px";
+      const mainY = top + Math.max(reach, (vh - top - bottom) / 2);   // centred if it fits, otherwise fully below the title
       slots = [];
       if (!narrow) {
-        // main planet on the left, small planets in a column on the right
+        // main planet on the left, small planets in a column on the right (within the first screenful)
         const column = Math.min(300, w * 0.24);
-        const top = 20, bottom = 20;
-        baseRadius = Math.min((w - column) * 0.38, (h - top - bottom) / 2.3);
-        radius = baseRadius * settings.size * zoom;
-        const mini = Math.min(0.3 * baseRadius, (h - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
-        slots.push({ x: (w - column) / 2 - w / 2 + 30, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
+        const mini = Math.min(0.3 * baseRadius, (vh - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
+        slots.push({ x: (w - column) / 2 - w / 2 + 30, y: mainY - H / 2, s: 1 });
         for (let k = 0; k < minis; k++) {
-          slots.push({ x: w / 2 - column / 2, y: 30 + (h - 60) * (k + 0.5) / minis - h / 2 - 12, s: mini });
+          slots.push({ x: w / 2 - column / 2, y: 30 + (vh - 60) * (k + 0.5) / minis - H / 2 - 12, s: mini });
         }
       } else {
-        // phones: main planet in the middle, small planets in a row at the bottom
-        const top = 15, bottom = 150;
-        baseRadius = Math.min(w * 0.37, (h - top - bottom) / 2.3);
-        radius = baseRadius * settings.size * zoom;
+        // phones: main planet at the top, small planets in a row underneath it
         const mini = Math.min(0.3 * baseRadius, w / minis * 0.62 / 2.3) / radius;
-        slots.push({ x: 0, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
+        slots.push({ x: 0, y: mainY - H / 2, s: 1 });
         for (let k = 0; k < minis; k++) {
-          slots.push({ x: w * (k + 0.5) / minis - w / 2, y: h / 2 - 95, s: mini });
+          slots.push({ x: w * (k + 0.5) / minis - w / 2, y: H / 2 - 95, s: mini });
         }
       }
       const th = radius * PHOTO_SIZE;
       stage.style.setProperty("--th", th + "px");
       stage.style.setProperty("--tw", th * 1.5 + "px");
       stage.style.setProperty("--gw", radius * 2.4 + "px");
-      persp = Math.max(2200, radius * 7);
       stage.style.perspective = persp + "px";
       worlds.forEach(world => { world.dirty = true; sizePathCanvas(world); });
       placeHero();
       if (!transition) positionLabels();
+      updateControls();
+    }
+
+    // the gear, arrows and touch buttons stay on screen while you're on the planets, and hide below them
+    function updateControls() {
+      const homeBottom = homeEl.offsetTop + homeEl.offsetHeight;
+      document.body.classList.toggle("past-planets", window.scrollY + window.innerHeight * 0.45 > homeBottom);
+    }
+    window.addEventListener("scroll", updateControls, { passive: true });
+
+    // when you start moving, glide the page so the character is comfortably on screen
+    function showHeroOnScreen() {
+      if (scene) return;
+      const r = heroEl.getBoundingClientRect();
+      const margin = Math.min(160, window.innerHeight * 0.2);
+      if (r.top < margin || r.bottom > window.innerHeight - margin) {
+        window.scrollBy({ top: (r.top + r.height / 2) - window.innerHeight / 2, behavior: "smooth" });
+      }
     }
 
     // roll a planet so its surface slides in screen direction (ux, uy) by an angle
@@ -1874,12 +1903,18 @@
     }
 
     const typing = e => e.target.closest && e.target.closest("input, textarea, select");
+    // the arrow keys work just like W A S D
+    const MOVE_KEYS = { KeyW: "KeyW", KeyA: "KeyA", KeyS: "KeyS", KeyD: "KeyD",
+                        ArrowUp: "KeyW", ArrowLeft: "KeyA", ArrowDown: "KeyS", ArrowRight: "KeyD" };
     document.addEventListener("keydown", e => {
       if (typing(e) || e.metaKey || e.ctrlKey) return;
-      const onPlanets = scene || window.scrollY < window.innerHeight * 0.6;
-      if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
-        if (!onPlanets) return;
-        keys[e.code] = true;
+      if (document.getElementById("lightbox").classList.contains("open")) return;   // arrows flip photos there
+      const onPlanets = scene || !document.body.classList.contains("past-planets");
+      const k = MOVE_KEYS[e.code];
+      if (k) {
+        if (!onPlanets) return;            // further down the page, the arrow keys scroll as normal
+        if (!keys[k]) showHeroOnScreen();
+        keys[k] = true;
         e.preventDefault();
       }
       if (e.code === "KeyC" && onPlanets) {
@@ -1887,13 +1922,13 @@
       }
       if (e.code === "Escape" && scene) leaveScene();
     });
-    document.addEventListener("keyup", e => { keys[e.code] = false; });
+    document.addEventListener("keyup", e => { keys[MOVE_KEYS[e.code] || e.code] = false; });
     window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 
     // on-screen pad for phones and tablets
     document.querySelectorAll("#dpad [data-key]").forEach(btn => {
       const k = btn.dataset.key;
-      const on = e => { e.preventDefault(); keys[k] = true; btn.classList.add("pressed"); };
+      const on = e => { e.preventDefault(); showHeroOnScreen(); keys[k] = true; btn.classList.add("pressed"); };
       const off = () => { keys[k] = false; btn.classList.remove("pressed"); };
       btn.addEventListener("pointerdown", on);
       btn.addEventListener("pointerup", off);
@@ -1989,12 +2024,6 @@
 
     document.getElementById("prevPlanet").addEventListener("click", () => goToPlanet(focused - 1));
     document.getElementById("nextPlanet").addEventListener("click", () => goToPlanet(focused + 1));
-    document.addEventListener("keydown", e => {
-      if (document.getElementById("lightbox").classList.contains("open") || scene) return;
-      if (window.scrollY > window.innerHeight / 2) return;
-      if (e.key === "ArrowLeft") goToPlanet(focused - 1);
-      if (e.key === "ArrowRight") goToPlanet(focused + 1);
-    });
 
     // which small planet (if any) is under a point on the screen
     function miniAt(clientX, clientY) {
