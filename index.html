@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Name Photography</title>
+  <meta name="description" content="Landscape and wildlife photography">
+  <style>
+    :root {
+      --bg: #111;
+      --text: #eee;
+      --muted: #999;
+      --accent: #c9a96e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+      line-height: 1.6;
+    }
+    header {
+      text-align: center;
+      padding: 4rem 1rem 2rem;
+    }
+    header h1 {
+      font-weight: normal;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      font-size: clamp(1.6rem, 5vw, 2.6rem);
+    }
+    header p { color: var(--muted); margin-top: 0.5rem; }
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      padding: 1rem;
+      position: sticky;
+      top: 0;
+      background: rgba(17, 17, 17, 0.92);
+      z-index: 10;
+    }
+    nav a {
+      color: var(--text);
+      text-decoration: none;
+      font-family: system-ui, sans-serif;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    nav a:hover { color: var(--accent); }
+    section {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 3rem 1rem;
+    }
+    section h2 {
+      font-weight: normal;
+      font-size: 1.4rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.5rem;
+    }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 0.75rem;
+    }
+    .gallery img {
+      width: 100%;
+      aspect-ratio: 3 / 2;
+      object-fit: cover;
+      cursor: zoom-in;
+      transition: opacity 0.2s;
+      background: #222;
+    }
+    .gallery img:hover { opacity: 0.85; }
+    .videos {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 1rem;
+    }
+    .videos iframe {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 0;
+    }
+    #about p { max-width: 650px; color: #ccc; }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      padding: 3rem 1rem;
+      font-size: 0.85rem;
+    }
+    /* Lightbox */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    #lightbox.open { display: flex; }
+    #lightbox img {
+      max-width: 95vw;
+      max-height: 85vh;
+      object-fit: contain;
+    }
+    #lightbox .caption { color: var(--muted); margin-top: 1rem; }
+    #lightbox button {
+      position: absolute;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 2.5rem;
+      cursor: pointer;
+      padding: 1rem;
+    }
+    #close { top: 0.5rem; right: 1rem; }
+    #prev { left: 0.5rem; }
+    #next { right: 0.5rem; }
+    @media (max-width: 500px) {
+      .videos { grid-template-columns: 1fr; }
+      .gallery { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Your Name</h1>
+    <p>Landscape &amp; Wildlife Photography</p>
+  </header>
+
+  <nav>
+    <a href="#landscape">Landscape</a>
+    <a href="#wildlife">Wildlife</a>
+    <a href="#video">Video</a>
+    <a href="#about">About</a>
+  </nav>
+
+  <section id="landscape">
+    <h2>Landscape</h2>
+    <div class="gallery" data-category="landscape"></div>
+  </section>
+
+  <section id="wildlife">
+    <h2>Wildlife</h2>
+    <div class="gallery" data-category="wildlife"></div>
+  </section>
+
+  <section id="video">
+    <h2>Video</h2>
+    <div class="videos"></div>
+  </section>
+
+  <section id="about">
+    <h2>About</h2>
+    <p>Write a few sentences about yourself here: where you shoot, what draws you to landscapes and wildlife, and what gear you use if you like.</p>
+    <p style="margin-top:1rem">Contact: <a href="mailto:you@example.com" style="color:var(--accent)">you@example.com</a></p>
+  </section>
+
+  <footer>© <span id="year"></span> Your Name. All rights reserved.</footer>
+
+  <div id="lightbox">
+    <button id="close" aria-label="Close">&times;</button>
+    <button id="prev" aria-label="Previous">&#8249;</button>
+    <img src="" alt="">
+    <div class="caption"></div>
+    <button id="next" aria-label="Next">&#8250;</button>
+  </div>
+
+  <script>
+    // ============================================================
+    //  EDIT THIS LIST to add your photos.
+    //  Put image files in the "images" folder next to this file.
+    // ============================================================
+    const photos = [
+      { file: "images/landscape-1.jpg", category: "landscape", caption: "Sunset over the hills" },
+      { file: "images/landscape-2.jpg", category: "landscape", caption: "Coastal morning" },
+      { file: "images/wildlife-1.jpg",  category: "wildlife",  caption: "Red-tailed hawk" },
+      { file: "images/wildlife-2.jpg",  category: "wildlife",  caption: "Deer at dusk" },
+    ];
+
+    // ============================================================
+    //  EDIT THIS LIST to add videos.
+    //  Use the ID from a YouTube link: youtube.com/watch?v=THIS_PART
+    // ============================================================
+    const youtubeVideos = [
+      // "dQw4w9WgXcQ",
+    ];
+
+    // ---------- You don't need to edit below this line ----------
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    document.querySelectorAll(".gallery").forEach(gallery => {
+      const cat = gallery.dataset.category;
+      photos.filter(p => p.category === cat).forEach(p => {
+        const img = document.createElement("img");
+        img.src = p.file;
+        img.alt = p.caption;
+        img.loading = "lazy";
+        img.addEventListener("click", () => openLightbox(photos.indexOf(p)));
+        gallery.appendChild(img);
+      });
+    });
+
+    const videoBox = document.querySelector(".videos");
+    if (youtubeVideos.length === 0) {
+      videoBox.innerHTML = '<p style="color:#999">Videos coming soon.</p>';
+    }
+    youtubeVideos.forEach(id => {
+      const frame = document.createElement("iframe");
+      frame.src = "https://www.youtube-nocookie.com/embed/" + id;
+      frame.allowFullscreen = true;
+      frame.loading = "lazy";
+      videoBox.appendChild(frame);
+    });
+
+    const lb = document.getElementById("lightbox");
+    const lbImg = lb.querySelector("img");
+    const lbCap = lb.querySelector(".caption");
+    let current = 0;
+
+    function openLightbox(i) {
+      current = i;
+      lbImg.src = photos[i].file;
+      lbImg.alt = photos[i].caption;
+      lbCap.textContent = photos[i].caption;
+      lb.classList.add("open");
+    }
+    function closeLightbox() { lb.classList.remove("open"); }
+    function step(d) { openLightbox((current + d + photos.length) % photos.length); }
+
+    document.getElementById("close").onclick = closeLightbox;
+    document.getElementById("prev").onclick = e => { e.stopPropagation(); step(-1); };
+    document.getElementById("next").onclick = e => { e.stopPropagation(); step(1); };
+    lb.addEventListener("click", e => { if (e.target === lb) closeLightbox(); });
+    document.addEventListener("keydown", e => {
+      if (!lb.classList.contains("open")) return;
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") step(-1);
+      if (e.key === "ArrowRight") step(1);
+    });
+  </script>
+</body>
+</html>
