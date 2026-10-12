@@ -69,12 +69,20 @@
       image-rendering: pixelated;      /* keep the trail pixels hard-edged, 8-bit style */
       image-rendering: crisp-edges;
       z-index: 20000;
-      transition: opacity 0.25s;
+    }
+    #travel {
+      position: absolute;
+      left: 0; top: 0;
+      pointer-events: none;
+      z-index: 20000;
+      image-rendering: pixelated;
     }
 
     /* ---------- character ---------- */
     #hero {
       position: absolute;
+      left: 50%;
+      top: 50%;
       z-index: 40000;
       pointer-events: none;
       transition: opacity 0.25s;
@@ -98,22 +106,16 @@
     #hero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
     #hero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; transform: translate(4%, 4%); }
     #hero.is-car .car { display: block; }
-    #hero.is-sheep .sheep.frame-a { display: block; }
-    /* two-frame trot when the sheep is moving */
-    #hero.is-sheep.moving .sheep.frame-a { animation: frameA var(--step, 0.3s) steps(1) infinite; }
-    #hero.is-sheep.moving .sheep.frame-b { display: block; animation: frameB var(--step, 0.3s) steps(1) infinite; }
-    @keyframes frameA { 0% { opacity: 1; } 50% { opacity: 0; } }
-    @keyframes frameB { 0% { opacity: 0; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4%); } }
-    #hero.is-car.moving .car { animation: rumble 0.1s steps(1) infinite; }
-    @keyframes rumble { 0% { transform: translateY(0); } 50% { transform: translateY(1.5%); } }
+    /* two-frame trot / flap: the script flips the "f2" class, so exactly one frame is ever shown */
+    #hero.is-sheep .sheep.frame-a, #sceneHero.is-sheep .sheep.frame-a,
+    #hero.is-ptero .ptero.frame-a, #sceneHero.is-ptero .ptero.frame-a { display: block; }
+    #hero.f2 .frame-a, #sceneHero.f2 .frame-a { display: none !important; }
+    #hero.is-sheep.f2 .sheep.frame-b, #sceneHero.is-sheep.f2 .sheep.frame-b { display: block; transform: translateY(-4%); }
+    #hero.is-ptero.f2 .ptero.frame-b, #sceneHero.is-ptero.f2 .ptero.frame-b { display: block; }
 
     #hero.in-photo { opacity: 0; }
     /* the pterodactyl flaps all the time, with a small faint shadow far below it */
     #hero.is-ptero .shadow { left: 34%; right: 34%; top: 34%; bottom: 34%; background: rgba(0,0,0,0.13); transform: scale(1.4); }
-    #hero.is-ptero .ptero.frame-a { display: block; animation: flapA 0.36s steps(1) infinite; }
-    #hero.is-ptero .ptero.frame-b { display: block; animation: flapB 0.36s steps(1) infinite; }
-    @keyframes flapA { 0% { opacity: 1; } 50% { opacity: 0; } }
-    @keyframes flapB { 0% { opacity: 0; } 50% { opacity: 1; } }
     .seg button { font-size: 0.72rem; }
 
     /* ---------- inside a photo ---------- */
@@ -151,9 +153,7 @@
     #sceneHero .shadow { position: absolute; border-radius: 50%; background: rgba(0,0,0,0.25); }
     #sceneHero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
     #sceneHero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; }
-    #sceneHero.is-car .car, #sceneHero.is-sheep .sheep.frame-a { display: block; }
-    #sceneHero.is-sheep.moving .sheep.frame-a { animation: frameA var(--step, 0.3s) steps(1) infinite; }
-    #sceneHero.is-sheep.moving .sheep.frame-b { display: block; animation: frameB var(--step, 0.3s) steps(1) infinite; }
+    #sceneHero.is-car .car { display: block; }
     #sceneHint {
       font-family: system-ui, sans-serif;
       font-size: 0.8rem;
@@ -652,6 +652,12 @@
           { file: "images/friends4.jpg", caption: "" },
         ]
       },
+      {
+        // an open world with no photos and no trails: roam anywhere, but sheep and cars can't swim
+        id: "open", name: "Open World", subtitle: "Roam anywhere", color: "#8fd18f",
+        open: true, lakes: 9,                      // how many lakes
+        photos: []
+      },
     ];
 
     // ============================================================
@@ -696,7 +702,7 @@
 
     // ---------- navigation links ----------
     const nav = document.getElementById("nav");
-    const navLinks = [["home", "Home"], ...planets.map(p => [p.id, p.name]), ["video", "Video"], ["about", "About"]];
+    const navLinks = [["home", "Home"], ...planets.filter(p => !p.open).map(p => [p.id, p.name]), ["video", "Video"], ["about", "About"]];
     nav.innerHTML = navLinks.map(([id, name]) => `<a href="#${id}">${name}</a>`).join("");
 
     // ---------- small vector / matrix helpers ----------
@@ -912,13 +918,51 @@
         pathAlpha: 1, pathsDirty: true,
         dirty: true
       };
-      buildTiles(world, buildLayout(world, data.photos.length));
-      // start each planet with a trail under the character
+      if (data.open) buildOpenWorld(world);
+      else buildTiles(world, buildLayout(world, data.photos.length));
+      // start each planet with a trail (or dry land) under the character
       const c = mulMV(world.rot, world.startPoint);
       const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
       if (l > 1e-6) world.rot = mulMM(axisAngle([ax[0] / l, ax[1] / l, ax[2] / l], Math.atan2(l, c[2])), world.rot);
       return world;
     });
+
+    // ---------- open world: grass and lakes, no trails ----------
+    function buildOpenWorld(world) {
+      const rand = seeded(555 + world.idx * 17);
+      world.paths = []; world.spurs = [];
+      world.trailPts = new Float32Array(0);
+      world.lakes = [];
+      for (let i = 0; i < (world.data.lakes || 0); i++) {
+        const c = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
+        const t1 = norm(cross(c, Math.abs(c[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), t2 = cross(c, t1);
+        world.lakes.push({ c, t1, t2, r: 0.2 + rand() * 0.22,
+          waves: [[2 + Math.floor(rand() * 2), rand() * 6.28, 0.16], [5 + Math.floor(rand() * 3), rand() * 6.28, 0.07]] });
+      }
+      // start on dry land, but near a lake shore so you can see the water
+      let start = [0, 0, 1];
+      for (let i = 0; i < 400; i++) {
+        const q = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
+        const lk = lakeDepth(world, q);
+        if (lk < -0.35 && lk > -0.7) { start = q; break; }
+      }
+      world.startPoint = start;
+    }
+    // how far inside a lake a point is: above 0 = water, around 0 = the shore, below 0 = dry land
+    function lakeDepth(world, p) {
+      let best = -1;
+      if (!world.lakes) return best;
+      for (const L of world.lakes) {
+        const d = L.c[0] * p[0] + L.c[1] * p[1] + L.c[2] * p[2];
+        if (d < 0.5) continue;
+        const ang = Math.atan2(L.t2[0] * p[0] + L.t2[1] * p[1] + L.t2[2] * p[2], L.t1[0] * p[0] + L.t1[1] * p[1] + L.t1[2] * p[2]);
+        let r = L.r;
+        for (const [f, ph, a] of L.waves) r *= 1 + a * Math.sin(f * ang + ph);   // wobbly shoreline
+        const depth = (r - Math.acos(Math.min(1, d))) / r;
+        if (depth > best) best = depth;
+      }
+      return best;
+    }
 
     function buildTiles(world, pts) {
       const photos = world.data.photos;
@@ -1099,7 +1143,7 @@
         const C = TRAIL_PALETTE[best];
         d[i] = C[0]; d[i + 1] = C[1]; d[i + 2] = C[2]; d[i + 3] = 255;
       }
-      if (settings.ground === "grass") paintGrass(world, d, W, H);
+      if (settings.ground === "grass" || world.data.open) paintGrass(world, d, W, H);
       ctx.putImageData(img, 0, 0);
     }
 
@@ -1109,6 +1153,8 @@
     // grass tufts and flowers stay put and roll with the planet as you move.
     const GRASS = [[38, 92, 36], [52, 122, 44], [74, 156, 60], [104, 188, 80], [146, 214, 106]];   // dark to light
     const FLOWERS = [[250, 248, 236], [255, 214, 72], [240, 120, 150]];
+    const WATER = [[30, 70, 140], [44, 104, 184], [66, 140, 214], [104, 178, 236], [224, 244, 255]];   // deep to light, then a glint
+    const SAND = [[206, 184, 116], [226, 206, 140]];
     const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - 0.47);
     const LIGHT = norm([-0.45, -0.55, 0.7]);                  // sunlight from the top left
     function hash3(x, y, z) {
@@ -1152,6 +1198,21 @@
             const pz = m[0][2]*x + m[1][2]*y + m[2][2]*z;
             // round-ball shading, darker toward the edge
             const shade = 0.25 + 0.75 * Math.max(0, x * LIGHT[0] + y * LIGHT[1] + z * LIGHT[2]);
+            if (world.lakes) {
+              const lk = lakeDepth(world, [px, py, pz]);
+              if (lk > -0.12) {
+                let c;
+                if (lk < 0) c = SAND[lk > -0.06 ? 1 : 0];             // sandy shore
+                else {
+                  // water: deeper = darker, little glints that stay on the surface
+                  const wl = shade * 2.6 - Math.min(1.2, lk * 2.2) + BAYER[(j & 3) * 4 + (i & 3)] * 0.8;
+                  const glint = hash3(Math.floor(px * 90), Math.floor(py * 90), Math.floor(pz * 90)) < 0.02 && lk > 0.15;
+                  c = glint ? WATER[4] : WATER[Math.max(0, Math.min(3, Math.round(wl)))];
+                }
+                d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+                continue;
+              }
+            }
             level = shade * 4.2 + BAYER[(j & 3) * 4 + (i & 3)] * 0.9;
             // grass tufts and the odd flower, fixed to spots on the ground
             const t = hash3(Math.floor(px * detail), Math.floor(py * detail), Math.floor(pz * detail));
@@ -1198,40 +1259,115 @@
         .sort((a, b) => a.lead - b.lead);
       const n = order.length;
       order.forEach((o, k) => { o.t.lag = n > 1 ? k / (n - 1) : 1; });   // 0 = start end, 1 = far end
+      world.leadSorted = order.map(o => o.lead);
     }
 
     // One continuous flow: every photo glides along the half ring at a steady pace, each setting off
     // a little after the one ahead of it. Halfway through, the photos are spread evenly along the
     // whole half ring, so the two planets together make a complete ring, and nothing stops.
+    // where something on a travelling planet is at this moment of the trip.
+    // c = its spot on the planet (as seen at the start), lag = when it sets off along the ring.
+    function travelPos(c, lag, S, E, side, g, ringness, tube, out) {
+      const W = 0.5;                                     // how spread out the stream is
+      const ph = clamp01((g - (1 - lag) * W) / (1 - W));
+      const P = arcPoint(S, E, ph, side);
+      const s = lerp(S.s, E.s, ph);
+      // direction the stream is heading here, so each item can sit on the tube's round wall
+      const A = arcPoint(S, E, Math.max(0, ph - 0.01), side), B = arcPoint(S, E, Math.min(1, ph + 0.01), side);
+      const tan = norm([B[0] - A[0], B[1] - A[1], B[2] - A[2]]);
+      const along = dot(c, tan);
+      const wall = norm([c[0] - tan[0]*along, c[1] - tan[1]*along, c[2] - tan[2]*along]);
+      // blend its spot on the planet with its spot on the tube wall
+      out[0] = P[0] + lerp(c[0] * radius * s, wall[0] * tube, ringness);
+      out[1] = P[1] + lerp(c[1] * radius * s, wall[1] * tube, ringness);
+      out[2] = P[2] + lerp(c[2] * radius * s, wall[2] * tube, ringness);
+      out[3] = s;
+      out[4] = lerp(c[2], 0.35 + 0.65 * wall[2], ringness);   // how much it faces you
+      return out;
+    }
+
     function drawTravel(world, S, E, side, T) {
       const g = 0.5 - 0.5 * Math.cos(Math.PI * T);      // gentle start and finish, no pause in the middle
-      const W = 0.5;                                     // how spread out the stream is
       const ringness = Math.sqrt(Math.sin(Math.PI * g)); // 0 = sphere, 1 = tube
       const tube = radius * TUBE_SIZE;
-      let cx = 0, cy = 0, cz = 0, cs = 0;
+      const out = [0, 0, 0, 0, 0];
       for (const t of world.tiles) {
-        const ph = clamp01((g - (1 - t.lag) * W) / (1 - W));
-        const P = arcPoint(S, E, ph, side);
-        const s = lerp(S.s, E.s, ph);
-        const c = mulMV(world.rot, t.p);
-
-        // direction the stream is heading here, so each photo can sit on the tube's round wall
-        const A = arcPoint(S, E, Math.max(0, ph - 0.01), side), B = arcPoint(S, E, Math.min(1, ph + 0.01), side);
-        const tan = norm([B[0] - A[0], B[1] - A[1], B[2] - A[2]]);
-        const along = dot(c, tan);
-        const wall = norm([c[0] - tan[0]*along, c[1] - tan[1]*along, c[2] - tan[2]*along]);
-
-        // blend each photo's spot on the planet with its spot on the tube wall
-        const sx = c[0] * radius * s, sy = c[1] * radius * s, sz = c[2] * radius * s;
-        const ox = lerp(sx, wall[0] * tube, ringness);
-        const oy = lerp(sy, wall[1] * tube, ringness);
-        const oz = lerp(sz, wall[2] * tube, ringness);
-        const facing = lerp(c[2], 0.35 + 0.65 * wall[2], ringness);   // far wall of the tube is softer
-        place(t, P[0] + ox, P[1] + oy, P[2] + oz, s, facing);
-        cx += P[0]; cy += P[1]; cz += P[2]; cs += s;
+        travelPos(mulMV(world.rot, t.p), t.lag, S, E, side, g, ringness, tube, out);
+        place(t, out[0], out[1], out[2], out[3], out[4]);
       }
-      const n = world.tiles.length;
-      placeGlow(world, cx / n, cy / n, cz / n, cs / n, 1 - ringness);
+      const P = arcPoint(S, E, g, side);
+      placeGlow(world, P[0], P[1], P[2], lerp(S.s, E.s, g), 1 - ringness);
+      drawTravelPixels(world, S, E, side, g, ringness, tube);
+    }
+
+    // ---------- the planet's own pixels travel too ----------
+    // When a switch starts, every pixel of the planet's grass / trails / lakes is picked up from its
+    // canvas and sent along the same ring as the photos, then the real planet takes over at the end.
+    const travelCanvas = document.createElement("canvas");
+    travelCanvas.id = "travel";
+    stage.appendChild(travelCanvas);
+    const travelCtx = travelCanvas.getContext("2d");
+    function lagFromLead(leads, lead) {
+      let lo = 0, hi = leads.length - 1;
+      if (lead <= leads[0]) return 0;
+      if (lead >= leads[hi]) return 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (leads[mid] <= lead) lo = mid; else hi = mid; }
+      const f = (lead - leads[lo]) / ((leads[hi] - leads[lo]) || 1);
+      return (lo + f) / (leads.length - 1);
+    }
+    function capturePixels(world, S, E) {
+      world.travelPixels = null;
+      const r = world.crect;
+      if (!r || world.pathAlpha <= 0) return;
+      const W = world.canvas.width, H = world.canvas.height;
+      const data = world.ctx.getImageData(0, 0, W, H).data;
+      let count = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i]) count++;
+      if (!count) return;
+      const stride = Math.max(1, Math.round(Math.sqrt(count / 2600)));   // keep it to a few thousand pieces
+      const sl = slots[world.slot], R = radius * sl.s;
+      const cx = stage.clientWidth / 2 + sl.x - r.left, cy = stage.clientHeight / 2 + sl.y - r.top;
+      const dx = E.x - S.x, dy = E.y - S.y, l = Math.hypot(dx, dy) || 1;
+      const groups = new Map(), all = [];
+      for (let j = 0; j < H; j += stride) for (let i = 0; i < W; i += stride) {
+        const o = (j * W + i) * 4;
+        if (!data[o + 3]) continue;
+        const u = ((i + 0.5) * trailPix - cx) / R, v = ((j + 0.5) * trailPix - cy) / R;
+        let z = 0, x = 0, y = 0, rr = 0;
+        for (let it = 0; it < 3; it++) {                    // undo the perspective
+          const k = persp / (persp - z * R);
+          x = u / k; y = v / k; rr = x * x + y * y;
+          z = rr < 1 ? Math.sqrt(1 - rr) : 0;
+        }
+        if (rr >= 1) continue;
+        // tiny flowers and glints would turn into big blobs when spread out, so use the colour next to them
+        let q = o;
+        if (stride > 1 && data[o] > 215 && data[o + 1] > 200 && i + 1 < W && data[o + 7]) q = o + 4;
+        if (stride > 1 && data[q] > 215 && data[q + 1] > 200 && i > 0 && data[o - 1]) q = o - 4;
+        const color = "rgb(" + data[q] + "," + data[q + 1] + "," + data[q + 2] + ")";
+        const px = { c: [x, y, z], lead: (x * dx + y * dy) / l, lag: 0, k0: persp / (persp - z * R) };
+        if (!groups.has(color)) groups.set(color, []);
+        groups.get(color).push(px);
+        all.push(px);
+      }
+      // set off at the same moment as the photos next to them
+      if (world.leadSorted && world.leadSorted.length > 1) all.forEach(px => px.lag = lagFromLead(world.leadSorted, px.lead));
+      else { all.sort((a, b) => a.lead - b.lead); all.forEach((px, k) => px.lag = all.length > 1 ? k / (all.length - 1) : 1); }
+      world.travelPixels = { groups, size: stride * trailPix, drawnS: sl.s };
+    }
+    function drawTravelPixels(world, S, E, side, g, ringness, tube) {
+      const tp = world.travelPixels;
+      if (!tp) return;
+      const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2, out = [0, 0, 0, 0, 0];
+      for (const [color, list] of tp.groups) {
+        travelCtx.fillStyle = color;
+        for (const px of list) {
+          travelPos(px.c, px.lag, S, E, side, g, ringness, tube, out);
+          const k = persp / (persp - out[2]);
+          const size = Math.max(1, tp.size * (out[3] / tp.drawnS) * (k / px.k0));
+          travelCtx.fillRect(Math.round(cx + out[0] * k - size / 2), Math.round(cy + out[1] * k - size / 2), Math.ceil(size), Math.ceil(size));
+        }
+      }
     }
 
     function goToPlanet(i) {
@@ -1244,21 +1380,31 @@
       const from = worlds[focused], to = worlds[i];
       const mainSpot = from.slot, otherSpot = to.slot;
 
-      if (!reduceMotion) {
-        const S1 = slots[mainSpot], E1 = slots[otherSpot];
+      const S1 = slots[mainSpot], E1 = slots[otherSpot];
+      const animate = !reduceMotion;
+      if (animate) {
         prepareTravel(from, S1, E1);
         prepareTravel(to, E1, S1);
-        transition = { from, to, S1, E1, start: performance.now() };
-        worlds.forEach(w => w.label.classList.add("hidden"));
-        from.pathAlpha = to.pathAlpha = 0;
-        from.canvas.style.opacity = to.canvas.style.opacity = 0;
-        heroEl.classList.add("away");
+        capturePixels(from, S1, E1);             // the leaving planet, at its full size
       }
       from.slot = otherSpot;
       to.slot = mainSpot;
       from.dirty = to.dirty = true;        // redraw both in their new spots (needed when the animation is skipped)
       sizePathCanvas(from);
       sizePathCanvas(to);
+      if (animate) {
+        // draw the arriving planet at full size first, so its pixels arrive crisp instead of blown up
+        to.pathAlpha = 1;
+        drawWorldPaths(to);
+        capturePixels(to, E1, S1);
+        travelCanvas.width = stage.clientWidth;
+        travelCanvas.height = stage.clientHeight;
+        transition = { from, to, S1, E1, start: performance.now() };
+        worlds.forEach(w => w.label.classList.add("hidden"));
+        from.pathAlpha = to.pathAlpha = 0;
+        from.canvas.style.opacity = to.canvas.style.opacity = 0;
+        heroEl.classList.add("away");
+      }
       focused = i;
       setActive();
       updateLabels();
@@ -1267,11 +1413,16 @@
     function drawTransition(now) {
       const { from, to, S1, E1, start } = transition;
       const T = clamp01((now - start) / TRANSITION_TIME);
+      travelCtx.clearRect(0, 0, travelCanvas.width, travelCanvas.height);
       drawTravel(from, S1, E1, -1, T);   // leaving: dives into the screen
       drawTravel(to, E1, S1, +1, T);     // arriving: comes out of the screen toward you
       if (T >= 1) {
         transition = null;
         from.dirty = to.dirty = true;
+        from.pathAlpha = to.pathAlpha = 1;            // the real planets take over from the travelling pixels
+        from.travelPixels = to.travelPixels = null;
+        travelCtx.clearRect(0, 0, travelCanvas.width, travelCanvas.height);
+        [from, to].forEach(w => { drawResting(w); drawWorldPaths(w); });   // same frame, so there's no blink
         heroEl.classList.remove("away");
         positionLabels();
       }
@@ -1292,7 +1443,7 @@
       sub.classList.add("fading");
       setTimeout(() => {
         name.textContent = d.name;
-        sub.textContent = d.photos.length ? (d.subtitle || "") : "Photos coming soon";
+        sub.textContent = d.photos.length || d.open ? (d.subtitle || "") : "Photos coming soon";
         name.classList.remove("fading");
         sub.classList.remove("fading");
       }, transition ? TRANSITION_TIME * 0.5 : 0);
@@ -1465,6 +1616,8 @@
       pixelArt(PTERO_UP, PTERO_COLORS, "ptero frame-a") +
       pixelArt(PTERO_DOWN, PTERO_COLORS, "ptero frame-b");
     heroEl.innerHTML = SPRITES;
+    stage.appendChild(heroEl);          // inside the 3D scene, so every browser keeps it in front of the photos
+    let heroBase = "";
 
     function heroSize() {
       return baseRadius * (settings.character === "ptero" ? 0.36 : 0.3) * Math.min(1, settings.size) * settings.charSize;
@@ -1472,21 +1625,24 @@
 
     function placeHero() {
       const sl = slots[0];
-      const k = persp / (persp - radius);             // the front of the planet is a little closer to you
-      const size = heroSize() * k;
+      const kFront = persp / (persp - radius);         // how much the front of the planet is enlarged
+      const zh = radius * 1.12;                        // a little closer to you than the nearest photo
+      const kh = persp / (persp - zh);
+      const size = heroSize() * kFront / kh;           // size before the 3D view enlarges it
       heroEl.style.width = heroEl.style.height = size + "px";
-      heroEl.style.left = (stage.clientWidth / 2 + sl.x * k - size / 2) + "px";
-      heroEl.style.top = (stage.clientHeight / 2 + sl.y * k - size / 2) + "px";
+      heroEl.style.marginLeft = heroEl.style.marginTop = (-size / 2) + "px";
+      heroBase = `translate3d(${sl.x * kFront / kh}px, ${sl.y * kFront / kh}px, ${zh}px) `;
       styleHero(heroEl);
     }
 
     // how the sprite is turned: the car and pterodactyl point in 8 directions, the sheep faces left or right
     function styleHero(el) {
+      const base = el === heroEl ? heroBase : "";
       if (settings.character === "car" || settings.character === "ptero") {
         const snap = Math.round(hero.heading / (Math.PI / 4)) * (Math.PI / 4);
-        el.style.transform = `rotate(${snap}rad)`;
+        el.style.transform = base + `rotate(${snap}rad)`;
       } else {
-        el.style.transform = `scaleX(${hero.face})`;
+        el.style.transform = base + `scaleX(${hero.face})`;
       }
     }
     function lookFor(el) {
@@ -1536,7 +1692,10 @@
 
     function showMotion(el, moving) {
       el.classList.toggle("moving", moving);
-      el.style.setProperty("--step", Math.max(0.12, 0.32 / Math.max(0.6, settings.speed)) + "s");
+      // one clock decides which frame shows, so the two frames can never drift apart and blink
+      const flapping = settings.character === "ptero";
+      const stepMs = flapping ? 180 : Math.max(120, 320 / Math.max(0.6, settings.speed));
+      el.classList.toggle("f2", (moving || flapping) && Math.floor(performance.now() / stepMs) % 2 === 1);
       styleHero(el);
     }
 
@@ -1555,12 +1714,15 @@
       return best;
     }
     function tryMove(world, dir, dist) {
-      const free = settings.character === "ptero";
+      const flying = settings.character === "ptero";
+      const free = flying || world.data.open;               // the open world has no trails to follow
+      const water = !flying && world.lakes;                  // ...but sheep and cars can't swim
       const now = free ? 1 : trailCloseness(world, world.rot[2]);
-      const tries = free ? [0] : [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4];
+      const tries = free && !water ? [0] : [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4];
       for (const off of tries) {
         const a = dir + off;
         const R2 = mulMM(axisAngle([-Math.cos(a), -Math.sin(a), 0], dist * Math.cos(off)), world.rot);
+        if (water && lakeDepth(world, R2[2]) > -0.02) continue;
         if (!free) {
           const near = trailCloseness(world, R2[2]);
           if (near < TRAIL_SLACK && near <= now + 1e-7) continue;
@@ -1975,7 +2137,7 @@
     // ---------- galleries (one section per planet) ----------
     const allPhotos = [];
     const galleries = document.getElementById("galleries");
-    planets.forEach(p => {
+    planets.filter(p => !p.open).forEach(p => {
       const section = document.createElement("section");
       section.className = "content";
       section.id = p.id;
