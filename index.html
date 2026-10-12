@@ -232,6 +232,23 @@
     }
     .videos iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; }
     #about p { max-width: 650px; color: #444; }
+    .contact {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .contact-label {
+      display: inline-block;
+      width: 6.5rem;
+      color: var(--muted);
+      font-family: system-ui, sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .contact a { color: var(--accent); text-decoration: none; }
+    .contact a:hover { text-decoration: underline; }
     .empty-note { color: var(--muted); }
     footer {
       text-align: center;
@@ -306,8 +323,11 @@
 
   <section class="content" id="about">
     <h2>About</h2>
-    <p>Write a few sentences about yourself here: where you shoot, what draws you to landscapes and wildlife, and what gear you use if you like.</p>
-    <p style="margin-top:1rem">Contact: <a href="mailto:you@example.com" style="color:var(--accent)">you@example.com</a></p>
+    <p>I love shooting landscapes, especially along the rugged coast and green hills of West Cork in Ireland and the cliffs and sunsets of Isla Vista. Some of my favorite shots come from road trips, where every stop is a chance to find a new view. Closer to home, I photograph my friends' band shows, capturing the energy of live music from the crowd and the stage.</p>
+    <div class="contact">
+      <div><span class="contact-label">Email</span><a href="mailto:sean@navonodo.com">sean@navonodo.com</a></div>
+      <div><span class="contact-label">Instagram</span><a href="https://www.instagram.com/seen.through.sean/" target="_blank" rel="noopener">@seen.through.sean</a></div>
+    </div>
   </section>
 
   <footer>&copy; <span id="year"></span> Sean O'Dono. All rights reserved.</footer>
@@ -377,11 +397,11 @@
     ];
 
     // ---------- Settings (optional to tweak) ----------
-    const MIN_TILES = 40;          // photos repeat until each planet has at least this many
+    const MIN_TILES = 100;          // photos repeat until each planet has at least this many
     const HOVER_DELAY = 500;        // ms of hovering before a photo enlarges (500 = 0.5 sec)
     const IDLE_SPEED = 0;           // spin when nobody is touching it (0 = stays still)
-    const TRANSITION_TIME = 2000;   // ms for the planets to swap places
-    const TUBE_SIZE = 0.15;          // thickness of the ring's tube, compared to the main planet
+    const TRANSITION_TIME = 4000;   // ms for the planets to swap places
+    const TUBE_SIZE = 0.3;          // thickness of the ring's tube, compared to the main planet
     const PLANET_SIZE = 1;          // make the main planet bigger or smaller (1.1 = 10% bigger)
 
     // ================= You don't need to edit below =================
