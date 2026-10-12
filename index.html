@@ -49,7 +49,7 @@
       position: relative;
       height: 100vh;
       height: 100svh;
-      min-height: 520px;
+      min-height: 560px;
       overflow: hidden;
     }
     #stage {
@@ -59,45 +59,33 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      perspective-origin: 50% 50%;
     }
     #stage.grabbing { cursor: grabbing; }
+    #stage.over-mini { cursor: pointer; }
 
-    .planet {
-      position: absolute;
-      left: 0; top: 0;
-      width: var(--box);
-      height: var(--box);
-      border-radius: 50%;
-      transform-origin: 50% 50%;
-      perspective-origin: 50% 50%;
-      transition: transform 0.9s cubic-bezier(0.65, 0.05, 0.3, 1), opacity 0.6s ease;
-    }
-    /* soft colored glow behind each planet */
-    .planet::before {
-      content: "";
-      position: absolute;
-      inset: 12%;
-      border-radius: 50%;
-      background: radial-gradient(circle, var(--glow) 0%, transparent 68%);
-      opacity: 0.35;
-      pointer-events: none;
-    }
-    .planet.focused { z-index: 2; }
-    .planet.mini { z-index: 1; cursor: pointer; opacity: 0.9; }
-    .planet.mini:hover { opacity: 1; }
-    .planet.mini .tile { pointer-events: none; }
-
-    .tile {
+    .tile, .glow {
       position: absolute;
       left: 50%;
       top: 50%;
+      will-change: transform, opacity;
+    }
+    .tile {
       width: var(--tw);
       height: var(--th);
       margin-left: calc(var(--tw) / -2);
       margin-top: calc(var(--th) / -2);
-      will-change: transform, opacity;
       background: var(--placeholder);
       box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    }
+    .glow {
+      width: var(--gw);
+      height: var(--gw);
+      margin-left: calc(var(--gw) / -2);
+      margin-top: calc(var(--gw) / -2);
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--glow) 0%, transparent 68%);
+      pointer-events: none;
     }
     .tile img {
       width: 100%;
@@ -107,9 +95,9 @@
       pointer-events: none;
       transition: filter 0.2s;
     }
-    .tile.back, .tile.empty { pointer-events: none; }
+    .tile.back, .tile.empty, .tile.inactive { pointer-events: none; }
     .tile.empty { box-shadow: none; background: #e6e6e6; }
-    .tile:not(.back):hover img { filter: brightness(1.08); }
+    .tile:not(.back):not(.inactive):hover img { filter: brightness(1.08); }
     /* progress bar that fills while hovering */
     .tile::after {
       content: "";
@@ -131,14 +119,14 @@
       border: none;
       color: var(--text);
       font-family: system-ui, sans-serif;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       white-space: nowrap;
       cursor: pointer;
       padding: 0.3rem 0.6rem;
       z-index: 6;
-      transition: left 0.9s cubic-bezier(0.65, 0.05, 0.3, 1), top 0.9s cubic-bezier(0.65, 0.05, 0.3, 1), opacity 0.4s;
+      transition: opacity 0.35s;
     }
     .planet-label:hover { color: var(--accent); }
     .planet-label.hidden { opacity: 0; pointer-events: none; }
@@ -160,8 +148,10 @@
       font-size: clamp(1.4rem, 4vw, 2.4rem);
       line-height: 1.2;
       margin-top: 0.3rem;
+      transition: opacity 0.4s;
     }
-    #planet-sub { color: var(--muted); font-size: 0.9rem; }
+    #planet-sub { color: var(--muted); font-size: 0.9rem; transition: opacity 0.4s; }
+    .fading { opacity: 0; }
     .hint {
       color: var(--muted);
       font-family: system-ui, sans-serif;
@@ -172,7 +162,8 @@
 
     .arrow {
       position: absolute;
-      top: 42%;
+      top: 50%;
+      transform: translateY(-50%);
       background: none;
       border: none;
       font-size: 2.6rem;
@@ -276,12 +267,12 @@
     #prev { left: 0.5rem; }
     #next { right: 0.5rem; }
 
-    @media (max-width: 600px) {
+    @media (max-width: 700px) {
       .videos, .gallery { grid-template-columns: 1fr; }
-      nav { gap: 0.4rem 0.9rem; font-size: 0.7rem; }
+      nav { gap: 0.4rem 0.9rem; }
       .home-title { left: 1rem; top: 4.8rem; }
       .hint { display: none; }
-      .arrow { top: auto; bottom: 30%; font-size: 2rem; }
+      .arrow { font-size: 2rem; padding: 0.5rem; }
     }
   </style>
 </head>
@@ -386,10 +377,12 @@
     ];
 
     // ---------- Settings (optional to tweak) ----------
-    const MIN_TILES = 100;       // photos repeat until each planet has at least this many
-    const HOVER_DELAY = 500;     // ms of hovering before a photo enlarges (500 = 0.5 sec)
-    const IDLE_SPEED = 0;        // spin when nobody is touching it (0 = stays still)
-    const RANDOMNESS = 0.6;      // how scattered the photos are (0 = perfectly even, 1 = very random)
+    const MIN_TILES = 100;          // photos repeat until each planet has at least this many
+    const HOVER_DELAY = 500;        // ms of hovering before a photo enlarges (500 = 0.5 sec)
+    const IDLE_SPEED = 0;           // spin when nobody is touching it (0 = stays still)
+    const TRANSITION_TIME = 4000;   // ms for the planets to swap places
+    const TUBE_SIZE = 0.3;          // thickness of the ring's tube, compared to the main planet
+    const PLANET_SIZE = 1;          // make the main planet bigger or smaller (1.1 = 10% bigger)
 
     // ================= You don't need to edit below =================
     document.getElementById("year").textContent = new Date().getFullYear();
@@ -406,6 +399,9 @@
     const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0]/l, a[1]/l, a[2]/l]; };
     const mulMV = (m, v) => [dot(m[0], v), dot(m[1], v), dot(m[2], v)];
     const mulMM = (a, b) => a.map(r => [0, 1, 2].map(j => r[0]*b[0][j] + r[1]*b[1][j] + r[2]*b[2][j]));
+    const clamp01 = x => Math.max(0, Math.min(1, x));
+    const ease = x => x < 0.5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2;   // smooth start and stop
+    const lerp = (a, b, t) => a + (b - a) * t;
     function axisAngle([x, y, z], t) {
       const c = Math.cos(t), s = Math.sin(t), C = 1 - c;
       return [
@@ -421,63 +417,66 @@
       return [a, b, cross(a, b)];
     }
 
+    // ---------- tidy layout: rows of photos like lines of latitude ----------
+    const ROWS = Math.max(5, Math.round(Math.sqrt(MIN_TILES / 0.85)));
+    function spherePoints(n) {
+      const lats = [], weights = [];
+      for (let k = 0; k < ROWS; k++) {
+        const lat = -Math.PI / 2 + (k + 0.5) * Math.PI / ROWS;
+        lats.push(lat);
+        weights.push(Math.cos(lat));
+      }
+      const total = weights.reduce((a, b) => a + b, 0);
+      const counts = weights.map(w => Math.max(1, Math.round(n * w / total)));
+      const pts = [];
+      lats.forEach((lat, k) => {
+        const c = counts[k];
+        const offset = (k % 2) * 0.5;          // stagger every other row like bricks
+        for (let i = 0; i < c; i++) {
+          const lon = (i + offset) / c * Math.PI * 2;
+          pts.push([Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]);
+        }
+      });
+      return pts;
+    }
+
     // ---------- build the planets ----------
+    // Every photo of every planet lives in one shared 3D space, so they can fly past each other.
     const stage = document.getElementById("stage");
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let radius = 250;
-    let focused = 0;
+    let radius = 250;          // main planet radius in pixels
+    let slots = [];            // slot 0 = the main spot, the rest = small planet spots
+    let focused = 0;           // which planet is in the main spot
+    let transition = null;
 
     const worlds = planets.map((data, idx) => {
-      const el = document.createElement("div");
-      el.className = "planet";
-      el.style.setProperty("--glow", data.color || "#ccc");
-      stage.appendChild(el);
+      const glow = document.createElement("div");
+      glow.className = "glow";
+      glow.style.setProperty("--glow", data.color || "#ccc");
+      stage.appendChild(glow);
 
       const label = document.createElement("button");
       label.className = "planet-label";
       label.textContent = data.name;
-      label.addEventListener("click", () => focusPlanet(idx));
+      label.addEventListener("click", () => goToPlanet(idx));
       stage.appendChild(label);
 
       const world = {
-        data, el, label, tiles: [],
-        rot: mulMM(axisAngle([0, 1, 0], idx * 1.3), axisAngle([1, 0, 0], -0.35)),
+        idx, data, glow, label, tiles: [], slot: idx,
+        rot: mulMM(axisAngle([0, 1, 0], idx * 0.7), axisAngle([1, 0, 0], -0.3)),
         vel: { x: 0, y: 0 },
         dirty: true
       };
-      buildTiles(world, idx);
-      el.addEventListener("click", () => { if (idx !== focused) focusPlanet(idx); });
+      buildTiles(world);
       return world;
     });
 
-    function buildTiles(world, idx) {
+    function buildTiles(world) {
       const photos = world.data.photos;
-      const n = Math.max(MIN_TILES, photos.length);
-      const golden = Math.PI * (3 - Math.sqrt(5));
-      // seeded random numbers, so the layout looks random but is the same on every visit
-      let seed = 12345 + idx * 7919;
-      const rand = () => {
-        seed = (seed + 0x6D2B79F5) | 0;
-        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-      const spacing = Math.sqrt(4 * Math.PI / n);
-      for (let i = 0; i < n; i++) {
-        // evenly spread points (Fibonacci lattice), each nudged a random amount
-        const y = 1 - ((i + 0.5) / n) * 2;
-        const r = Math.sqrt(1 - y * y);
-        const th = golden * i;
-        const j = spacing * RANDOMNESS;
-        const p = norm([
-          Math.cos(th) * r + (rand() - 0.5) * j,
-          y + (rand() - 0.5) * j,
-          Math.sin(th) * r + (rand() - 0.5) * j
-        ]);
-
+      spherePoints(Math.max(MIN_TILES, photos.length)).forEach((p, i) => {
         const el = document.createElement("div");
         el.className = "tile";
-        const tile = { el, img: null, p, photo: null, world };
+        const tile = { el, img: null, p, photo: null, world, lag: 0 };
         if (photos.length) {
           const photo = photos[i % photos.length];
           const img = new Image();
@@ -491,92 +490,210 @@
         } else {
           el.classList.add("empty");
         }
-        world.el.appendChild(el);
+        stage.appendChild(el);
         world.tiles.push(tile);
-      }
+      });
     }
 
-    function renderWorld(world) {
+    // put one photo at a point in 3D (pixels from the middle of the screen)
+    function place(t, x, y, z, s, facing) {
+      t.el.style.transform = `translate3d(${x}px,${y}px,${z}px) scale(${s})`;
+      t.el.style.zIndex = Math.round(z + 20000);
+      t.el.style.opacity = facing > 0 ? 0.55 + 0.45 * facing : 0.1 + 0.2 * (1 + facing);
+      const isBack = facing < 0.1;
+      if (isBack !== t.el.classList.contains("back")) {
+        t.el.classList.toggle("back", isBack);
+        if (isBack && hoverTile === t) cancelHover();
+      }
+    }
+    function placeGlow(world, x, y, z, s, alpha = 1) {
+      world.glow.style.transform = `translate3d(${x}px,${y}px,${z - radius * s}px) scale(${s})`;
+      world.glow.style.zIndex = Math.round(z - radius * s + 20000);
+      world.glow.style.opacity = 0.35 * alpha;
+    }
+
+    // a planet sitting still in its spot
+    function drawResting(world) {
+      const { x, y, s } = slots[world.slot];
       for (const t of world.tiles) {
         const c = mulMV(world.rot, t.p);
-        // move each photo to its spot on the sphere but keep it upright and facing you
-        t.el.style.transform = `translate3d(${c[0]*radius}px,${c[1]*radius}px,${c[2]*radius}px)`;
-        const facing = c[2];
-        t.el.style.zIndex = Math.round((facing + 1) * 1000);
-        t.el.style.opacity = facing > 0 ? 0.55 + 0.45 * facing : 0.1 + 0.2 * (1 + facing);
-        const isBack = facing < 0.1;
-        if (isBack !== t.el.classList.contains("back")) {
-          t.el.classList.toggle("back", isBack);
-          if (isBack && hoverTile === t) cancelHover();
-        }
+        place(t, x + c[0]*radius*s, y + c[1]*radius*s, c[2]*radius*s, s, c[2]);
       }
+      placeGlow(world, x, y, 0, s);
       world.dirty = false;
     }
 
-    // ---------- placing the planets on screen ----------
-    function layout() {
-      const w = stage.clientWidth, h = stage.clientHeight;
-      radius = Math.min(w, h) * (w < 600 ? 0.3 : 0.26);
-      const box = radius * 3;
-      const tw = Math.min(radius * Math.sqrt(4 * Math.PI / MIN_TILES) * 0.8, radius * 0.6);
-      stage.style.setProperty("--box", box + "px");
-      stage.style.setProperty("--tw", tw + "px");
-      stage.style.setProperty("--th", (tw * 2 / 3) + "px");
-
-      // small planets along the bottom
-      const others = worlds.map((_, i) => i).filter(i => i !== focused);
-      const gap = w / (others.length + 1);
-      const mini = Math.min(0.24, (gap * 0.8) / box, (h * 0.2) / box);
-      const miniSize = box * mini;
-      const miniY = h - miniSize / 2 - 42;
-
-      // the focused planet fills the space above them
-      const topSpace = w < 600 ? 170 : 60;
-      const avail = miniY - miniSize / 2 - topSpace;
-      const big = Math.min(1, avail / box);
-      const bigY = topSpace + avail / 2;
-
-      worlds.forEach((world, i) => {
-        world.el.style.perspective = (radius * 4) + "px";
-        world.dirty = true;
-        let cx, cy, s;
-        if (i === focused) {
-          cx = w / 2; cy = bigY; s = big;
-          world.label.classList.add("hidden");
-        } else {
-          const k = others.indexOf(i);
-          cx = gap * (k + 1); cy = miniY; s = mini;
-          world.label.classList.remove("hidden");
-          world.label.style.left = cx + "px";
-          world.label.style.top = (cy + miniSize / 2 - 4) + "px";
-        }
-        world.el.style.transform = `translate(${cx - box / 2}px, ${cy - box / 2}px) scale(${s})`;
-        world.el.classList.toggle("focused", i === focused);
-        world.el.classList.toggle("mini", i !== focused);
-      });
-
-      const d = worlds[focused].data;
-      document.getElementById("planet-name").textContent = d.name;
-      document.getElementById("planet-sub").textContent =
-        d.photos.length ? (d.subtitle || "") : "Photos coming soon";
+    // ---------- swapping two planets along a shared ring ----------
+    // The two spots are the ends of a circle that stands up "into" the screen.
+    // The leaving planet takes the half of the circle that goes behind the screen,
+    // the arriving planet takes the half that comes out toward you.
+    const RING_TILT = 0.65;   // tilts the ring so you can see its round shape (0 = edge-on)
+    function arcPoint(S, E, phase, side) {
+      const a = phase * Math.PI;
+      const dx = E.x - S.x, dy = E.y - S.y;
+      const len = Math.hypot(dx, dy) || 1, half = len / 2;
+      // the ring rises "into the screen" but is also tipped sideways so it reads as a loop
+      const px = -dy / len, py = dx / len;
+      const out = Math.sin(a) * half * side;
+      const sx = Math.abs(px) > Math.abs(py) ? Math.sign(px) : Math.sign(py);   // keep the leaving half on the upper/left side
+      return [
+        (S.x + E.x) / 2 - Math.cos(a) * dx / 2 + out * Math.sin(RING_TILT) * px * sx,
+        (S.y + E.y) / 2 - Math.cos(a) * dy / 2 + out * Math.sin(RING_TILT) * py * sx,
+        out * Math.cos(RING_TILT)
+      ];
     }
 
-    function focusPlanet(i) {
-      if (i === focused) return;
+    function prepareTravel(world, S, E) {
+      // give each photo its own spot along the half ring. Photos on the side facing the
+      // destination get the spots furthest along, so the planet unrolls into a line without tangling.
+      const dx = E.x - S.x, dy = E.y - S.y, l = Math.hypot(dx, dy) || 1;
+      const order = world.tiles
+        .map(t => { const c = mulMV(world.rot, t.p); return { t, lead: (c[0] * dx + c[1] * dy) / l }; })
+        .sort((a, b) => a.lead - b.lead);
+      const n = order.length;
+      order.forEach((o, k) => { o.t.lag = n > 1 ? k / (n - 1) : 1; });   // 0 = start end, 1 = far end
+    }
+
+    // One continuous flow: every photo glides along the half ring at a steady pace, each setting off
+    // a little after the one ahead of it. Halfway through, the photos are spread evenly along the
+    // whole half ring, so the two planets together make a complete ring, and nothing stops.
+    function drawTravel(world, S, E, side, T) {
+      const g = 0.5 - 0.5 * Math.cos(Math.PI * T);      // gentle start and finish, no pause in the middle
+      const W = 0.5;                                     // how spread out the stream is
+      const ringness = Math.sqrt(Math.sin(Math.PI * g)); // 0 = sphere, 1 = tube
+      const tube = radius * TUBE_SIZE;
+      let cx = 0, cy = 0, cz = 0, cs = 0;
+      for (const t of world.tiles) {
+        const ph = clamp01((g - (1 - t.lag) * W) / (1 - W));
+        const P = arcPoint(S, E, ph, side);
+        const s = lerp(S.s, E.s, ph);
+        const c = mulMV(world.rot, t.p);
+
+        // direction the stream is heading here, so each photo can sit on the tube's round wall
+        const A = arcPoint(S, E, Math.max(0, ph - 0.01), side), B = arcPoint(S, E, Math.min(1, ph + 0.01), side);
+        const tan = norm([B[0] - A[0], B[1] - A[1], B[2] - A[2]]);
+        const along = dot(c, tan);
+        const wall = norm([c[0] - tan[0]*along, c[1] - tan[1]*along, c[2] - tan[2]*along]);
+
+        // blend each photo's spot on the planet with its spot on the tube wall
+        const sx = c[0] * radius * s, sy = c[1] * radius * s, sz = c[2] * radius * s;
+        const ox = lerp(sx, wall[0] * tube, ringness);
+        const oy = lerp(sy, wall[1] * tube, ringness);
+        const oz = lerp(sz, wall[2] * tube, ringness);
+        const facing = lerp(c[2], 0.35 + 0.65 * wall[2], ringness);   // far wall of the tube is softer
+        place(t, P[0] + ox, P[1] + oy, P[2] + oz, s, facing);
+        cx += P[0]; cy += P[1]; cz += P[2]; cs += s;
+      }
+      const n = world.tiles.length;
+      placeGlow(world, cx / n, cy / n, cz / n, cs / n, 1 - ringness);
+    }
+
+    function goToPlanet(i) {
+      i = (i + worlds.length) % worlds.length;
+      if (i === focused || transition) return;
       cancelHover();
       closeMagnifier();
-      worlds[focused].vel = { x: 0, y: 0 };
-      focused = (i + worlds.length) % worlds.length;
-      layout();
+      dragging = false;
+      stage.classList.remove("grabbing");
+
+      const from = worlds[focused], to = worlds[i];
+      from.vel = { x: 0, y: 0 };
+      to.vel = { x: 0, y: 0 };
+      const mainSpot = from.slot, otherSpot = to.slot;
+
+      if (!reduceMotion) {
+        const S1 = slots[mainSpot], E1 = slots[otherSpot];
+        prepareTravel(from, S1, E1);
+        prepareTravel(to, E1, S1);
+        transition = { from, to, S1, E1, start: performance.now() };
+        worlds.forEach(w => w.label.classList.add("hidden"));
+      }
+      from.slot = otherSpot;
+      to.slot = mainSpot;
+      focused = i;
+      setActive();
+      updateLabels();
     }
-    document.getElementById("prevPlanet").addEventListener("click", () => focusPlanet(focused - 1));
-    document.getElementById("nextPlanet").addEventListener("click", () => focusPlanet(focused + 1));
-    document.addEventListener("keydown", e => {
-      if (document.getElementById("lightbox").classList.contains("open")) return;
-      if (window.scrollY > window.innerHeight / 2) return;
-      if (e.key === "ArrowLeft") focusPlanet(focused - 1);
-      if (e.key === "ArrowRight") focusPlanet(focused + 1);
-    });
+
+    function drawTransition(now) {
+      const { from, to, S1, E1, start } = transition;
+      const T = clamp01((now - start) / TRANSITION_TIME);
+      drawTravel(from, S1, E1, -1, T);   // leaving: dives into the screen
+      drawTravel(to, E1, S1, +1, T);     // arriving: comes out of the screen toward you
+      if (T >= 1) {
+        transition = null;
+        from.dirty = to.dirty = true;
+        positionLabels();
+      }
+    }
+
+    function setActive() {
+      worlds.forEach(w => {
+        const isMain = w.idx === focused;
+        w.tiles.forEach(t => t.el.classList.toggle("inactive", !isMain));
+      });
+    }
+
+    function updateLabels() {
+      const d = worlds[focused].data;
+      const name = document.getElementById("planet-name");
+      const sub = document.getElementById("planet-sub");
+      name.classList.add("fading");
+      sub.classList.add("fading");
+      setTimeout(() => {
+        name.textContent = d.name;
+        sub.textContent = d.photos.length ? (d.subtitle || "") : "Photos coming soon";
+        name.classList.remove("fading");
+        sub.classList.remove("fading");
+      }, transition ? TRANSITION_TIME * 0.5 : 0);
+      if (!transition) positionLabels();
+    }
+
+    function positionLabels() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      worlds.forEach(world => {
+        const sl = slots[world.slot];
+        if (world.idx === focused) { world.label.classList.add("hidden"); return; }
+        world.label.classList.remove("hidden");
+        world.label.style.left = (w / 2 + sl.x) + "px";
+        world.label.style.top = (h / 2 + sl.y + radius * sl.s * 1.12) + "px";
+      });
+    }
+
+    // ---------- size and position of the spots ----------
+    function layout() {
+      const w = stage.clientWidth, h = stage.clientHeight;
+      const narrow = w < 700 || h > w * 1.1;
+      const minis = worlds.length - 1;
+      slots = [];
+      if (!narrow) {
+        // main planet on the left, small planets in a column on the right
+        const column = Math.min(300, w * 0.24);
+        const top = 50, bottom = 20;
+        radius = Math.min((w - column) * 0.38, (h - top - bottom) / 2.3) * PLANET_SIZE;
+        const mini = Math.min(0.3, ((h - 60) / minis) / (radius * 2.9));
+        slots.push({ x: (w - column) / 2 - w / 2 + 30, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
+        for (let k = 0; k < minis; k++) {
+          slots.push({ x: w / 2 - column / 2, y: 30 + (h - 60) * (k + 0.5) / minis - h / 2 - 12, s: mini });
+        }
+      } else {
+        // phones: main planet in the middle, small planets in a row at the bottom
+        const top = 165, bottom = 150;
+        radius = Math.min(w * 0.37, (h - top - bottom) / 2.3) * PLANET_SIZE;
+        const mini = Math.min(0.3, (w / minis * 0.62) / (radius * 2.3));
+        slots.push({ x: 0, y: top + (h - top - bottom) / 2 - h / 2, s: 1 });
+        for (let k = 0; k < minis; k++) {
+          slots.push({ x: w * (k + 0.5) / minis - w / 2, y: h / 2 - 95, s: mini });
+        }
+      }
+      const th = radius * Math.PI / ROWS * 0.78;
+      stage.style.setProperty("--th", th + "px");
+      stage.style.setProperty("--tw", th * 1.5 + "px");
+      stage.style.setProperty("--gw", radius * 2.4 + "px");
+      stage.style.perspective = Math.max(2200, radius * 7) + "px";
+      worlds.forEach(world => world.dirty = true);
+      if (!transition) positionLabels();
+    }
 
     function spin(world, dx, dy, speed = 0.005) {
       const d = Math.hypot(dx, dy);
@@ -585,17 +702,37 @@
       world.dirty = true;
     }
 
-    // ---------- dragging the focused planet ----------
-    let dragging = false, last = null, moved = 0;
+    document.getElementById("prevPlanet").addEventListener("click", () => goToPlanet(focused - 1));
+    document.getElementById("nextPlanet").addEventListener("click", () => goToPlanet(focused + 1));
+    document.addEventListener("keydown", e => {
+      if (document.getElementById("lightbox").classList.contains("open")) return;
+      if (window.scrollY > window.innerHeight / 2) return;
+      if (e.key === "ArrowLeft") goToPlanet(focused - 1);
+      if (e.key === "ArrowRight") goToPlanet(focused + 1);
+    });
+
+    // which small planet (if any) is under a point on the screen
+    function miniAt(clientX, clientY) {
+      const r = stage.getBoundingClientRect();
+      const x = clientX - r.left - r.width / 2, y = clientY - r.top - r.height / 2;
+      return worlds.find(w => {
+        if (w.idx === focused) return false;
+        const sl = slots[w.slot];
+        return Math.hypot(x - sl.x, y - sl.y) < radius * sl.s * 1.15;
+      });
+    }
+
+    // ---------- dragging the main planet / clicking small planets ----------
+    let dragging = false, last = null, moved = 0, pressedMini = null;
     let idleDir = { x: 1, y: 0.25 };
 
     stage.addEventListener("pointerdown", e => {
-      if (magnified) return;
+      if (magnified || transition) return;
       if (e.target.closest("button")) return;
-      const p = e.target.closest(".planet");
-      if (p && !p.classList.contains("focused")) return;   // small planets are clicked, not dragged
-      dragging = true;
       moved = 0;
+      pressedMini = miniAt(e.clientX, e.clientY);
+      if (pressedMini) return;            // small planets are clicked, not dragged
+      dragging = true;
       last = { x: e.clientX, y: e.clientY };
       worlds[focused].vel = { x: 0, y: 0 };
       stage.classList.add("grabbing");
@@ -603,7 +740,11 @@
     });
     window.addEventListener("pointermove", e => {
       if (magnified) { checkMagnifierHover(e); return; }
-      if (!dragging) return;
+      if (!dragging) {
+        if (!transition) stage.classList.toggle("over-mini", !!miniAt(e.clientX, e.clientY));
+        if (pressedMini) moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+        return;
+      }
       const dx = e.clientX - last.x, dy = e.clientY - last.y;
       last = { x: e.clientX, y: e.clientY };
       const world = worlds[focused];
@@ -614,6 +755,12 @@
     });
     function endDrag(e) {
       if (magnified && magnified.pointerType !== "mouse") closeMagnifier();
+      if (pressedMini) {
+        const target = pressedMini;
+        pressedMini = null;
+        if (moved < 10) goToPlanet(target.idx);
+        return;
+      }
       if (!dragging) return;
       dragging = false;
       stage.classList.remove("grabbing");
@@ -632,8 +779,8 @@
 
     function attachHover(tile) {
       tile.el.addEventListener("pointerenter", e => {
-        if (magnified || tile.el.classList.contains("back")) return;
-        if (!tile.world.el.classList.contains("focused")) return;
+        if (magnified || transition || tile.el.classList.contains("back")) return;
+        if (tile.world.idx !== focused) return;
         if (dragging && e.pointerType === "mouse") return;
         cancelHover();
         hoverTile = tile;
@@ -653,6 +800,7 @@
     }
 
     function magnify(tile, pointerType) {
+      if (transition) return;
       tile.el.classList.remove("charging");
       dragging = false;
       stage.classList.remove("grabbing");
@@ -696,23 +844,29 @@
 
     // ---------- animation loop ----------
     let frame = 0;
-    function tick() {
-      const world = worlds[focused];
-      if (!dragging && !magnified) {
-        const v = world.vel, s = Math.hypot(v.x, v.y);
-        if (s > 0.05) {
-          spin(world, v.x, v.y);       // momentum after a flick
-          v.x *= 0.95; v.y *= 0.95;
-        } else if (!reduceMotion && IDLE_SPEED > 0) {
-          spin(world, idleDir.x * IDLE_SPEED, idleDir.y * IDLE_SPEED);
+    function tick(now) {
+      if (transition) {
+        drawTransition(now);
+      } else {
+        const world = worlds[focused];
+        if (!dragging && !magnified) {
+          const v = world.vel, s = Math.hypot(v.x, v.y);
+          if (s > 0.05) {
+            spin(world, v.x, v.y);       // momentum after a flick
+            v.x *= 0.95; v.y *= 0.95;
+          } else if (!reduceMotion && IDLE_SPEED > 0) {
+            spin(world, idleDir.x * IDLE_SPEED, idleDir.y * IDLE_SPEED);
+          }
         }
+        if (++frame % 120 === 0) world.rot = orthonormalize(world.rot);
       }
-      if (++frame % 120 === 0) world.rot = orthonormalize(world.rot);
-      for (const w of worlds) if (w.dirty) renderWorld(w);
+      if (!transition) for (const w of worlds) if (w.dirty) drawResting(w);
       requestAnimationFrame(tick);
     }
 
     layout();
+    setActive();
+    updateLabels();
     window.addEventListener("resize", layout);
     requestAnimationFrame(tick);
 
@@ -759,16 +913,16 @@
     const lb = document.getElementById("lightbox");
     const lbImg = lb.querySelector("img");
     const lbCap = lb.querySelector(".caption");
-    let current = 0;
+    let lbIndex = 0;
     function openLightbox(i) {
-      current = i;
+      lbIndex = i;
       lbImg.src = allPhotos[i].file;
       lbImg.alt = allPhotos[i].caption;
       lbCap.textContent = allPhotos[i].caption;
       lb.classList.add("open");
     }
     function closeLightbox() { lb.classList.remove("open"); }
-    function step(d) { openLightbox((current + d + allPhotos.length) % allPhotos.length); }
+    function step(d) { openLightbox((lbIndex + d + allPhotos.length) % allPhotos.length); }
     document.getElementById("close").onclick = closeLightbox;
     document.getElementById("prev").onclick = e => { e.stopPropagation(); step(-1); };
     document.getElementById("next").onclick = e => { e.stopPropagation(); step(1); };
