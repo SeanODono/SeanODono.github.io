@@ -336,34 +336,42 @@
     .planet-label:hover { color: var(--accent); }
     .planet-label.hidden { opacity: 0; pointer-events: none; }
 
+    /* the title sits in its own band under the menu; the planets live in the space below it */
     .home-title {
       position: absolute;
-      top: 3.4rem;
-      left: 1.5rem;
+      top: 2.8rem;
+      left: 0; right: 0;
+      padding: 0.3rem 1.5rem 0.55rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 1.1rem;
+      background: var(--bg);
+      border-bottom: 1px solid #eee;
       pointer-events: none;
-      z-index: 5;
+      z-index: 7;
     }
     .home-title h1 {
       font-weight: normal;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      font-size: clamp(1.1rem, 3vw, 1.7rem);
+      font-size: clamp(1rem, 2.2vw, 1.4rem);
     }
     #planet-name {
-      font-size: clamp(1.4rem, 4vw, 2.4rem);
+      font-size: clamp(1.25rem, 3vw, 1.9rem);
       line-height: 1.2;
-      margin-top: 0.3rem;
       transition: opacity 0.4s;
     }
     #planet-sub { color: var(--muted); font-size: 0.9rem; transition: opacity 0.4s; }
     .fading { opacity: 0; }
     .hint {
+      flex-basis: 100%;
       color: var(--muted);
       font-family: system-ui, sans-serif;
       font-size: 0.75rem;
-      margin-top: 0.6rem;
-      max-width: 15rem;
+      margin-top: 0.15rem;
     }
+    #stage { overflow: hidden; }
 
     .arrow {
       position: absolute;
@@ -492,7 +500,7 @@
     @media (max-width: 700px) {
       .videos, .gallery { grid-template-columns: 1fr; }
       nav { gap: 0.4rem 0.9rem; }
-      .home-title { left: 1rem; top: 4.8rem; }
+      .home-title { top: 4.4rem; padding: 0.2rem 1rem 0.45rem; }
       .hint { display: none; }
       .arrow { font-size: 2rem; padding: 0.5rem; }
       #gear { bottom: 9.5rem; }
@@ -682,12 +690,12 @@
                                     // (1 = right on the trail, 3 = loose, 6 = very loose, 100 = go anywhere)
 
     // Starting values. Visitors can change these with the gear button on the page.
-    const CHARACTER = "sheep";      // "sheep", "car" or "ptero" (pterodactyl)
-    const PLANET_SIZE = 1;          // size of the main planet (1.2 = 20% bigger, up to 10)
+    const CHARACTER = "car";        // "sheep", "car" or "ptero" (pterodactyl)
+    const PLANET_SIZE = 1.85;       // size of the main planet (1.2 = 20% bigger, up to 10)
     const SPEED = 1;                // how fast the character moves (2 = twice as fast, up to 10)
-    const PHOTO_PIXELS = 32;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
+    const PHOTO_PIXELS = 20;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
     const GROUND = "grass";         // "grass" (solid 8-bit grassy planet) or "clear" (see-through planet)
-    const CHARACTER_SIZE = 1;       // size of the sheep / car / pterodactyl (2 = twice as big)
+    const CHARACTER_SIZE = 0.85;    // size of the sheep / car / pterodactyl (2 = twice as big)
     const FLYING_ZOOM = 0.8;        // the world shrinks to this size while you fly the pterodactyl (1 = no change)
 
     // ================= You don't need to edit below =================
@@ -1463,6 +1471,8 @@
 
     // ---------- size and position of the spots ----------
     function layout() {
+      const band = document.querySelector(".home-title");
+      stage.style.top = Math.ceil(band.offsetTop + band.offsetHeight) + "px";   // planets start below the title
       const w = stage.clientWidth, h = stage.clientHeight;
       const narrow = w < 700 || h > w * 1.1;
       const minis = worlds.length - 1;
@@ -1470,7 +1480,7 @@
       if (!narrow) {
         // main planet on the left, small planets in a column on the right
         const column = Math.min(300, w * 0.24);
-        const top = 50, bottom = 20;
+        const top = 20, bottom = 20;
         baseRadius = Math.min((w - column) * 0.38, (h - top - bottom) / 2.3);
         radius = baseRadius * settings.size * zoom;
         const mini = Math.min(0.3 * baseRadius, (h - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
@@ -1480,7 +1490,7 @@
         }
       } else {
         // phones: main planet in the middle, small planets in a row at the bottom
-        const top = 165, bottom = 150;
+        const top = 15, bottom = 150;
         baseRadius = Math.min(w * 0.37, (h - top - bottom) / 2.3);
         radius = baseRadius * settings.size * zoom;
         const mini = Math.min(0.3 * baseRadius, w / minis * 0.62 / 2.3) / radius;
