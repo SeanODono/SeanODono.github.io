@@ -552,7 +552,7 @@
         <span class="set-label">Planet</span>
         <div class="seg">
           <button data-ground="clear">Clear</button>
-          <button data-ground="grass">Grass</button>
+          <button data-ground="grass">Solid</button>
         </div>
       </div>
       <label class="set-row">
@@ -626,10 +626,11 @@
     //     { file: "images/myphoto.jpg", caption: "" },
     //  A planet with no photos shows as a blank gray planet.
     //  "color" is the soft glow behind the planet.
+    //  "theme" sets the look: "meadow", "ireland", "usa" (several biomes), "forest" or "night".
     // ============================================================
     const planets = [
       {
-        id: "ireland", name: "Ireland", subtitle: "Landscape", color: "#7fbf7f",
+        id: "ireland", name: "Ireland", subtitle: "Landscape", color: "#58b64c", theme: "ireland",
         photos: [
           { file: "images/ireland1.jpg", caption: "" },
           { file: "images/ireland2.jpg", caption: "" },
@@ -653,7 +654,7 @@
         ]
       },
       {
-        id: "usa", name: "USA", subtitle: "Landscape", color: "#7fa8d9",
+        id: "usa", name: "USA", subtitle: "Landscape", color: "#e8a160", theme: "usa",
         photos: [
           { file: "images/USA1.jpg", caption: "" },
           { file: "images/USA2.jpg", caption: "" },
@@ -665,7 +666,7 @@
         ]
       },
       {
-        id: "wildlife", name: "Wildlife", subtitle: "", color: "#d9b26f",
+        id: "wildlife", name: "Wildlife", subtitle: "", color: "#3f8a4a", theme: "forest",
         photos: [
           { file: "images/wild1.jpg", caption: "" },
           { file: "images/wild2.jpg", caption: "" },
@@ -674,7 +675,7 @@
         ]
       },
       {
-        id: "friends", name: "Friends", subtitle: "", color: "#e09aa8",
+        id: "friends", name: "Friends", subtitle: "", color: "#8a5cf0", theme: "night",
         photos: [
           { file: "images/friends1.jpg", caption: "" },
           { file: "images/friends2.jpg", caption: "" },
@@ -691,7 +692,7 @@
       },
       {
         // an open world with no photos and no trails: roam anywhere, but sheep and cars can't swim
-        id: "open", name: "Open World", subtitle: "Roam anywhere", color: "#8fd18f",
+        id: "open", name: "Open World", subtitle: "Roam anywhere", color: "#8fd18f", theme: "meadow",
         open: true, lakes: 9,                      // how many lakes
         photos: []
       },
@@ -715,15 +716,15 @@
     const PHOTO_GAP = 0.42;         // distance between photos along a trail (bigger = more spread out, fewer photos)
     const PHOTO_SIZE = 0.16;        // size of each photo, compared to the planet
     const PATH_WIDTH = 0.05;        // width of the main trails, compared to the planet
-    const TRAIL_LOOSENESS = 3;      // how far the sheep / car can stray from a trail, in trail widths
-                                    // (1 = right on the trail, 3 = loose, 6 = very loose, 100 = go anywhere)
+    const TRAIL_LOOSENESS = 100;    // how far the sheep / car can stray from a trail, in trail widths
+                                    // (100 = go anywhere, 6 = very loose, 3 = loose, 1 = right on the trail)
 
     // Starting values. Visitors can change these with the gear button on the page.
     const CHARACTER = "car";        // "sheep", "car" or "ptero" (pterodactyl)
     const PLANET_SIZE = 1.85;       // size of the main planet (1.2 = 20% bigger, up to 10)
     const SPEED = 1;                // how fast the character moves (2 = twice as fast, up to 10)
     const PHOTO_PIXELS = 20;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
-    const GROUND = "grass";         // "grass" (solid 8-bit grassy planet) or "clear" (see-through planet)
+    const GROUND = "grass";         // "grass" (solid 8-bit ground, themed per planet) or "clear" (see-through planet)
     const CHARACTER_SIZE = 0.85;    // size of the sheep / car / pterodactyl (2 = twice as big)
     const FLYING_ZOOM = 0.8;        // the world shrinks to this size while you fly the pterodactyl (1 = no change)
 
@@ -953,6 +954,190 @@
       return photos;
     }
 
+    // ================= planet themes =================
+    // Each planet in the list at the top picks a theme with  theme: "..."  (meadow, ireland, usa, forest, night).
+    // A theme sets the ground colours, the trail style and the little 8-bit decorations.
+    const rgbOf = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const pal = list => list.map(rgbOf);
+    const GRASS = [[38, 92, 36], [52, 122, 44], [74, 156, 60], [104, 188, 80], [146, 214, 106]];   // dark to light
+    const FLOWERS = [[250, 248, 236], [255, 214, 72], [240, 120, 150]];
+
+    // trail styles: each layer is [width, colour, dashed?], drawn widest first
+    const TRAIL_STYLES = {
+      dirt:   { layers: [[1.5, "#5e4229"], [1.0, "#94714a"], [0.35, "#ba9562"]], pebbles: true },
+      forest: { layers: [[1.5, "#3a2817"], [1.0, "#6a4b2d"], [0.35, "#86643f"]], pebbles: true },
+      stone:  { layers: [[1.9, "#9a978c"], [1.3, "#5e4229"], [0.95, "#94714a"], [0.3, "#ba9562"]], pebbles: true },  // dry-stone walls along the edges
+      road:   { layers: [[1.55, "#2c2c30"], [1.2, "#55555b"], [0.17, "#f2c84b", true]], pebbles: false },             // asphalt, dashed yellow centre line
+      neon:   { layers: [[2.0, "#3a1a5c"], [1.05, "#ff3fa4"], [0.35, "#ffe6f6"]], pebbles: false }
+    };
+    for (const k in TRAIL_STYLES) TRAIL_STYLES[k].palette = TRAIL_STYLES[k].layers.map(l => rgbOf(l[1]));
+
+    // little 8-bit decorations, drawn from pixel maps ("." = see-through)
+    const DECOR = {
+      castle: { big: true, rows: [
+        "......FF.....",
+        "......F......",
+        "......P......",
+        "S.S.S.P.S.S.S",
+        "SSSSS.P.SSSSS",
+        "SsWsSSSSSsWsS",
+        "SSSSSsSsSSSSS",
+        "SSSSSDDDSSSSS",
+        "SsSSSDDDSSSsS",
+        "SSSSSDDDSSSSS"],
+        colors: { S: "#a5a196", s: "#7f7b72", W: "#2b2420", D: "#5a3b22", F: "#d23a2f", P: "#4a4a4a" } },
+      stonehenge: { big: true, rows: [
+        "SSSSS...SSSSS...SSSSS",
+        "Ss.sS...Ss.sS...Ss.sS",
+        "Ss.sS.s.Ss.sS.s.Ss.sS",
+        "Ss.sS.S.Ss.sS.S.Ss.sS",
+        "Ss.sS.S.Ss.sS.S.Ss.sS"],
+        colors: { S: "#b5b2a6", s: "#8a877d" } },
+      sheep: { rows: [".WWWW.", "WWWWWK", "WWWWWK", ".K..K."], colors: { W: "#f4f1ea", K: "#2e2a27" } },
+      bush: { rows: [".BBB.", "BBbBB", ".BBB."], colors: { B: "#2a6a27", b: "#1f521e" } },
+      rock: { rows: [".RRR.", "RRrRR", "RrRRR"], colors: { R: "#9b978c", r: "#76726a" } },
+      pine: { rows: ["..G..", ".GGG.", "..G..", ".GGG.", "GGgGG", ".GGG.", "GgGGg", "..T.."],
+        colors: { G: "#1e4f2c", g: "#2f6e3f", T: "#5a3a22" } },
+      tree: { rows: [".LLLL..", "LLlLLL.", "LLLLlLL", ".LlLLL.", "..LLL..", "...T...", "..TTT.."],
+        colors: { L: "#4f7f2c", l: "#6b9a3a", T: "#5a3a22" } },
+      cactus: { rows: ["..C..", "C.C..", "C.C.C", "CCC.C", "..CCC", "..C..", "..C.."], colors: { C: "#3f7f3a" } },
+      butte: { big: true, rows: [
+        "...RRRRRRRR....",
+        "...RrRRRRrR....",
+        "..RRRRRRRRRR...",
+        "..RRrRRRRRRRR..",
+        ".RRRRRRrRRRRRR.",
+        "RRrRRRRRRRRrRRR",
+        "RRRRRRRRRRRRRRR"],
+        colors: { R: "#b4532c", r: "#8e3c1f" } },
+      sage: { rows: [".Ss.", "SSsS"], colors: { S: "#7f8a62", s: "#a8b38a" } },
+      drift: { rows: ["DDDDDDD.", ".DdDDDdD"], colors: { D: "#cdb79a", d: "#a8927a" } },
+      mountain: { big: true, rows: [
+        ".......W.......",
+        "......WWW......",
+        ".....WWMWW.....",
+        "....MMMMMMM....",
+        "...MMmMMMMMM...",
+        "..MMMMMMmMMMM..",
+        ".MMmMMMMMMMMMM.",
+        "MMMMMMMMMMMmMMM"],
+        colors: { W: "#f4f4f4", M: "#6b6f86", m: "#555970" } },
+      graffiti: { rows: ["ABCDEFAB", "CDEFABCD", "EFABCDEF"],
+        colors: { A: "#e8457f", B: "#3fd0e8", C: "#f2d14b", D: "#7d4fe0", E: "#5fd06a", F: "#f07c3a" } },
+      stage: { big: true, rows: [
+        "K...............K",
+        "KTTTTTTTTTTTTTTTK",
+        "K.Y.P.C.Y.P.C.Y.K",
+        "K...............K",
+        "KNN...........NNK",
+        "KNN...........NNK",
+        "SSSSSSSSSSSSSSSSS",
+        "SsSsSsSsSsSsSsSsS"],
+        colors: { K: "#9a9ab8", T: "#9a9ab8", Y: "#fff27a", P: "#ff5fd2", C: "#5ff2ff", N: "#4a4a5e", S: "#7b55a0", s: "#5d3f7d" } },
+      lamp: { rows: [".Y.", "YYY", ".Y.", ".K.", ".K.", ".K.", ".K.", "KKK"], colors: { Y: "#ff5fd2", K: "#9a9ab8" } }
+    };
+    const DECOR_UNIT = 0.012;          // how big one decoration pixel is, compared to the planet
+
+    const THEMES = {
+      meadow: { ground: GRASS, flowers: FLOWERS, trail: "dirt" },
+      ireland: {
+        ground: pal(["#1d5422", "#28712c", "#36903a", "#4fad48", "#7ccb66"]), flowers: FLOWERS, trail: "stone",
+        landmarks: ["castle", "stonehenge"],
+        decor: [["sheep", 8], ["bush", 12], ["rock", 8]]
+      },
+      forest: {
+        ground: pal(["#143a1a", "#1c4f23", "#25662d", "#307d38", "#43964a"]), flowers: pal(["#e8e0c8", "#d23a2f"]), trail: "forest",
+        decor: [["pine", 34], ["tree", 18, { L: "#2d6b2f", l: "#3f8a3c" }], ["rock", 8], ["bush", 10]]
+      },
+      night: {
+        ground: pal(["#0d0e2a", "#14163a", "#1c1f4d", "#262a63", "#323779"]),
+        flowers: pal(["#ff5fd2", "#5ff2ff", "#fff27a"]), flowerRate: 0.02, trail: "neon",
+        landmarks: ["stage"],
+        decor: [["lamp", 12], ["graffiti", 3]]
+      },
+      // the USA is made of several biomes, each based on the photos
+      usa: {
+        trail: "road",
+        biomes: [
+          { name: "red-rock canyon", ground: pal(["#7a331b", "#9c4424", "#b75a30", "#cf7444", "#e09363"]), flowers: [],
+            decor: [["butte", 4], ["rock", 7, { R: "#a5532e", r: "#7e3a1f" }], ["tree", 6, { L: "#8fc04a", l: "#b5dc6a" }]] },
+          { name: "sagebrush desert", ground: pal(["#5d5a3c", "#76704a", "#8f8659", "#a89c69", "#c1b27c"]), flowers: pal(["#d9c27a"]),
+            decor: [["sage", 18], ["cactus", 6]] },
+          { name: "beach", ground: pal(["#c2ad83", "#d2bd93", "#dfcca6", "#ebdcb8", "#f5ead0"]), flowers: [], water: 0.34,
+            decor: [["drift", 5], ["rock", 3]] },
+          { name: "mountain lake", ground: pal(["#2a5636", "#376a42", "#457f4e", "#56955c", "#6caa6c"]), flowers: FLOWERS, water: 0.22,
+            decor: [["pine", 18], ["mountain", 2]] },
+          { name: "oak hills", ground: pal(["#8a6a2c", "#a5803a", "#bf9848", "#d4ae5c", "#e3c374"]), flowers: [],
+            decor: [["tree", 9], ["bush", 6, { B: "#6f7a3a", b: "#5a6430" }], ["graffiti", 1]] }
+        ]
+      }
+    };
+
+    // ---------- biomes: big regions of a planet, each with its own ground ----------
+    function setupBiomes(world) {
+      const th = world.theme;
+      if (!th.biomes) return;
+      const rand = seeded(2024 + world.idx * 53);
+      const twist = mulMM(axisAngle(norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), rand() * 6.28), axisAngle([0, 1, 0], rand() * 6.28));
+      const dirs = [[0, 0.15, 1], [1, 0.05, -0.25], [-0.95, 0.3, -0.3], [0.1, -1, 0.05], [-0.1, 1, -0.3]];
+      world.biomes = th.biomes.map((b, i) => ({
+        def: b, c: norm(mulMV(twist, norm(dirs[i % dirs.length]))),
+        nd: norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), nf: 5 + rand() * 5, np: rand() * 6.28
+      }));
+      // beaches get an ocean and the mountain biome a lake, in the middle of their region
+      world.lakes = world.lakes || [];
+      world.biomes.forEach(B => {
+        if (!B.def.water) return;
+        const c = B.c, t1 = norm(cross(c, Math.abs(c[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), t2 = cross(c, t1);
+        world.lakes.push({ c, t1, t2, r: B.def.water,
+          waves: [[2 + Math.floor(rand() * 2), rand() * 6.28, 0.14], [5 + Math.floor(rand() * 3), rand() * 6.28, 0.06]] });
+      });
+    }
+    // which biome a spot is in (with wiggly borders); also returns the runner-up and how close the call was
+    function biomeAt(world, p) {
+      let b1 = 0, b2 = 0, v1 = -9, v2 = -9;
+      const B = world.biomes;
+      for (let i = 0; i < B.length; i++) {
+        const b = B[i];
+        const v = b.c[0] * p[0] + b.c[1] * p[1] + b.c[2] * p[2] +
+                  0.08 * Math.sin((b.nd[0] * p[0] + b.nd[1] * p[1] + b.nd[2] * p[2]) * b.nf + b.np);
+        if (v > v1) { v2 = v1; b2 = b1; v1 = v; b1 = i; } else if (v > v2) { v2 = v; b2 = i; }
+      }
+      return [b1, b2, v1 - v2];
+    }
+
+    // ---------- placing decorations in the open spaces ----------
+    function buildDecor(world) {
+      const th = world.theme, rand = seeded(31337 + world.idx * 97), out = [];
+      const photoPts = world.tiles.map(t => t.p);
+      const fits = (q, room) => {
+        if (world.trailPts.length && trailCloseness(world, q) > Math.cos(PATH_WIDTH * 1.2 + room)) return false;
+        if (photoPts.some(p => dot(p, q) > Math.cos(PHOTO_SIZE * 0.95 + room))) return false;
+        if (lakeDepth(world, q) > -0.1) return false;
+        if (out.some(o => dot(o.p, q) > Math.cos(o.room + room))) return false;
+        return true;
+      };
+      const put = (name, colors, biome, tries) => {
+        const sp = DECOR[name];
+        const size = sp.rows[0].length * DECOR_UNIT * (sp.big ? 1.25 : 1), room = size * 0.55;
+        for (let t = 0; t < tries; t++) {
+          const q = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
+          if (biome != null && biomeAt(world, q)[0] !== biome) continue;
+          if (!fits(q, room)) continue;
+          const all = Object.assign({}, sp.colors, colors || {}), rgb = {};
+          for (const k in all) rgb[k] = rgbOf(all[k]);
+          out.push({ p: q, sprite: sp, rgb, size, room });
+          return;
+        }
+      };
+      (th.landmarks || []).forEach(n => put(n, null, null, 4000));
+      (th.decor || []).forEach(([n, count, colors]) => { for (let i = 0; i < count; i++) put(n, colors, null, 300); });
+      (th.biomes || []).forEach((b, bi) => (b.decor || []).forEach(([n, count, colors]) => {
+        for (let i = 0; i < count; i++) put(n, colors, bi, DECOR[n].big ? 4000 : 500);   // big ones need more tries to find room
+      }));
+      world.decor = out;
+    }
+
     const worlds = planets.map((data, idx) => {
       const glow = document.createElement("div");
       glow.className = "glow";
@@ -976,8 +1161,11 @@
         pathAlpha: 1, pathsDirty: true,
         dirty: true
       };
+      world.theme = THEMES[data.theme] || THEMES.meadow;
       if (data.open) buildOpenWorld(world);
       else buildTiles(world, buildLayout(world, data.photos.length));
+      setupBiomes(world);
+      buildDecor(world);
       // start each planet with a trail (or dry land) under the character
       const c = mulMV(world.rot, world.startPoint);
       const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
@@ -1115,13 +1303,6 @@
     }
 
     // a tiny 8-bit palette for the dirt
-    const TRAIL_PALETTE = [[94, 66, 41], [148, 113, 74], [186, 149, 98]];   // dark edge, dirt, worn middle
-    const hex = c => "rgb(" + c.join(",") + ")";
-    const PATH_LAYERS = [
-      { width: 1.5, color: hex(TRAIL_PALETTE[0]) },
-      { width: 1.0, color: hex(TRAIL_PALETTE[1]) },
-      { width: 0.35, color: hex(TRAIL_PALETTE[2]) }
-    ];
     function drawWorldPaths(world) {
       world.pathsDirty = false;
       const ctx = world.ctx, r = world.crect;
@@ -1135,6 +1316,7 @@
       const sl = slots[world.slot], R = radius * sl.s, m = world.rot;
       const ox = stage.clientWidth / 2 + sl.x - r.left, oy = stage.clientHeight / 2 + sl.y - r.top;
       const base = PATH_WIDTH * R;
+      const style = TRAIL_STYLES[world.theme.trail] || TRAIL_STYLES.dirt;
 
       // work out where every trail point lands on screen
       for (const path of world.paths) {
@@ -1154,16 +1336,18 @@
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       // segments are grouped by (pixel-rounded) width so each group is drawn in one go
-      for (const layer of PATH_LAYERS) {
-        ctx.strokeStyle = layer.color;
+      for (const [lw, color, dashed] of style.layers) {
+        ctx.strokeStyle = color;
         const groups = new Map();
         for (const path of world.paths) {
+          if (dashed && path.w < 1) continue;               // side roads get no centre line
           const P = path.proj, n = path.pts.length;
           for (let i = 0; i < n - 1; i++) {
+            if (dashed && (i >> 1) % 2) continue;            // dashes: two segments on, two off
             const z1 = P[i*4+2], z2 = P[i*4+6];
             if (z1 < 0.02 || z2 < 0.02) continue;          // only the side facing you
             const z = (z1 + z2) / 2, k = (P[i*4+3] + P[i*4+7]) / 2;
-            const width = Math.max(trailPix * 0.9, base * path.w * layer.width * k * (0.3 + 0.7 * z));
+            const width = Math.max(trailPix * 0.9, base * path.w * lw * k * (0.3 + 0.7 * z));
             const g = Math.round(width / (trailPix * 0.5));
             let list = groups.get(g);
             if (!list) groups.set(g, list = []);
@@ -1181,43 +1365,46 @@
         }
       }
       // little dark pebbles that stay put on the ground as it rolls
-      ctx.fillStyle = PATH_LAYERS[0].color;
-      for (const path of world.paths) {
-        if (path.w < 1) continue;
-        const P = path.proj, n = path.pts.length;
-        for (let i = 3; i < n - 1; i += 7) {
-          if (P[i*4+2] < 0.25) continue;
-          const dx = P[i*4+4] - P[i*4-4], dy = P[i*4+5] - P[i*4-3], l = Math.hypot(dx, dy) || 1;
-          const off = base * 0.3 * P[i*4+3] * ((i % 2) ? 1 : -1);
-          ctx.fillRect(P[i*4] - dy / l * off - trailPix / 2, P[i*4+1] + dx / l * off - trailPix / 2, trailPix, trailPix);
+      if (style.pebbles) {
+        ctx.fillStyle = style.layers[style.layers.length > 3 ? 1 : 0][1];
+        for (const path of world.paths) {
+          if (path.w < 1) continue;
+          const P = path.proj, n = path.pts.length;
+          for (let i = 3; i < n - 1; i += 7) {
+            if (P[i*4+2] < 0.25) continue;
+            const dx = P[i*4+4] - P[i*4-4], dy = P[i*4+5] - P[i*4-3], l = Math.hypot(dx, dy) || 1;
+            const off = base * 0.3 * P[i*4+3] * ((i % 2) ? 1 : -1);
+            ctx.fillRect(P[i*4] - dy / l * off - trailPix / 2, P[i*4+1] + dx / l * off - trailPix / 2, trailPix, trailPix);
+          }
         }
       }
 
-      // snap every pixel to the palette with hard edges: no blur, no soft anti-aliasing
-      const img = ctx.getImageData(0, 0, W, H), d = img.data;
+      // snap every pixel to the trail's palette with hard edges: no blur, no soft anti-aliasing
+      const img = ctx.getImageData(0, 0, W, H), d = img.data, TP = style.palette;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] < 110) { d[i + 3] = 0; continue; }
         const a = d[i + 3] / 255;
         const r0 = d[i] / a, g0 = d[i + 1] / a, b0 = d[i + 2] / a;
         let best = 0, bestD = 1e9;
-        for (let c = 0; c < 3; c++) {
-          const C = TRAIL_PALETTE[c];
+        for (let c = 0; c < TP.length; c++) {
+          const C = TP[c];
           const dd = (r0 - C[0]) ** 2 + (g0 - C[1]) ** 2 + (b0 - C[2]) ** 2;
           if (dd < bestD) { bestD = dd; best = c; }
         }
-        const C = TRAIL_PALETTE[best];
+        const C = TP[best];
         d[i] = C[0]; d[i + 1] = C[1]; d[i + 2] = C[2]; d[i + 3] = 255;
       }
-      if (settings.ground === "grass" || world.data.open) paintGrass(world, d, W, H);
+      if (settings.ground === "grass" || world.data.open) {
+        paintGround(world, d, W, H);
+        drawDecor(world, d, W, H);
+      }
       ctx.putImageData(img, 0, 0);
     }
 
 
-    // ---------- 8-bit grass planet ----------
+    // ---------- the solid 8-bit ground ----------
     // Every pixel inside the planet's outline is traced back to a spot on the ground, so the
-    // grass tufts and flowers stay put and roll with the planet as you move.
-    const GRASS = [[38, 92, 36], [52, 122, 44], [74, 156, 60], [104, 188, 80], [146, 214, 106]];   // dark to light
-    const FLOWERS = [[250, 248, 236], [255, 214, 72], [240, 120, 150]];
+    // ground colours, tufts, flowers and biomes stay put and roll with the planet as you move.
     const WATER = [[30, 70, 140], [44, 104, 184], [66, 140, 214], [104, 178, 236], [224, 244, 255]];   // deep to light, then a glint
     const SAND = [[206, 184, 116], [226, 206, 140]];
     const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - 0.47);
@@ -1227,9 +1414,10 @@
       h = Math.imul(h ^ (h >>> 13), 1274126177);
       return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
     }
-    function paintGrass(world, d, W, H) {
+    function paintGround(world, d, W, H) {
       const r = world.crect, sl = slots[world.slot], R = radius * sl.s, m = world.rot;
       const cx = stage.clientWidth / 2 + sl.x - r.left, cy = stage.clientHeight / 2 + sl.y - r.top;
+      const th = world.theme;
       // where each pixel lands on the ball only changes when the layout changes, so remember it
       const key = W + "x" + H + ":" + R + ":" + persp + ":" + cx + ":" + cy;
       if (world.grassKey !== key) {
@@ -1248,49 +1436,94 @@
         }
       }
       const view = world.grassView;
-      const detail = 70;
+      const detail = 70, p = [0, 0, 0];
       for (let j = 0; j < H; j++) {
         for (let i = 0; i < W; i++) {
           const o = (j * W + i) * 4;
           if (d[o + 3]) continue;                             // a trail is already here
           if (view[o + 3] >= 1) continue;                    // outside the planet
           const x = view[o], y = view[o + 1], z = view[o + 2];
-          let level;
-          {
-            // point in the planet's own coordinates (so it rolls with the planet)
-            const px = m[0][0]*x + m[1][0]*y + m[2][0]*z;
-            const py = m[0][1]*x + m[1][1]*y + m[2][1]*z;
-            const pz = m[0][2]*x + m[1][2]*y + m[2][2]*z;
-            // round-ball shading, darker toward the edge
-            const shade = 0.25 + 0.75 * Math.max(0, x * LIGHT[0] + y * LIGHT[1] + z * LIGHT[2]);
-            if (world.lakes) {
-              const lk = lakeDepth(world, [px, py, pz]);
-              if (lk > -0.12) {
-                let c;
-                if (lk < 0) c = SAND[lk > -0.06 ? 1 : 0];             // sandy shore
-                else {
-                  // water: deeper = darker, little glints that stay on the surface
-                  const wl = shade * 2.6 - Math.min(1.2, lk * 2.2) + BAYER[(j & 3) * 4 + (i & 3)] * 0.8;
-                  const glint = hash3(Math.floor(px * 90), Math.floor(py * 90), Math.floor(pz * 90)) < 0.02 && lk > 0.15;
-                  c = glint ? WATER[4] : WATER[Math.max(0, Math.min(3, Math.round(wl)))];
-                }
-                d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
-                continue;
+          const dither = BAYER[(j & 3) * 4 + (i & 3)];
+          // point in the planet's own coordinates (so it rolls with the planet)
+          const px = p[0] = m[0][0]*x + m[1][0]*y + m[2][0]*z;
+          const py = p[1] = m[0][1]*x + m[1][1]*y + m[2][1]*z;
+          const pz = p[2] = m[0][2]*x + m[1][2]*y + m[2][2]*z;
+          // round-ball shading, darker toward the edge
+          const shade = 0.25 + 0.75 * Math.max(0, x * LIGHT[0] + y * LIGHT[1] + z * LIGHT[2]);
+          if (world.lakes) {
+            const lk = lakeDepth(world, p);
+            if (lk > -0.12) {
+              let c;
+              if (lk < 0) c = SAND[lk > -0.06 ? 1 : 0];             // sandy shore
+              else {
+                // water: deeper = darker, little glints that stay on the surface
+                const wl = shade * 2.6 - Math.min(1.2, lk * 2.2) + dither * 0.8;
+                const glint = hash3(Math.floor(px * 90), Math.floor(py * 90), Math.floor(pz * 90)) < 0.02 && lk > 0.15;
+                c = glint ? WATER[4] : WATER[Math.max(0, Math.min(3, Math.round(wl)))];
               }
-            }
-            level = shade * 4.2 + BAYER[(j & 3) * 4 + (i & 3)] * 0.9;
-            // grass tufts and the odd flower, fixed to spots on the ground
-            const t = hash3(Math.floor(px * detail), Math.floor(py * detail), Math.floor(pz * detail));
-            if (t < 0.006 && z > 0.3) {
-              const f = FLOWERS[Math.floor(t * 500) % 3];
-              d[o] = f[0]; d[o + 1] = f[1]; d[o + 2] = f[2]; d[o + 3] = 255;
+              d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
               continue;
             }
-            if (t < 0.07) level += 1;
-            else if (t > 0.93) level -= 1;
           }
-          const c = GRASS[Math.max(0, Math.min(4, Math.round(level)))];
+          // which colours to use here: the theme's, or the biome's (dithered where two biomes meet)
+          let ground = th.ground || GRASS, flowers = th.flowers || FLOWERS, rate = th.flowerRate || 0.006;
+          if (world.biomes) {
+            const [b1, b2, gap] = biomeAt(world, p);
+            const b = world.biomes[gap < 0.04 && dither * 0.04 + 0.02 > gap ? b2 : b1].def;
+            ground = b.ground; flowers = b.flowers; rate = b.flowerRate || 0.006;
+          }
+          let level = shade * 4.2 + dither * 0.9;
+          // tufts and the odd flower, fixed to spots on the ground
+          const t = hash3(Math.floor(px * detail), Math.floor(py * detail), Math.floor(pz * detail));
+          if (flowers.length && t < rate && z > 0.3) {
+            const f = flowers[Math.floor(t / rate * 997) % flowers.length];
+            d[o] = f[0]; d[o + 1] = f[1]; d[o + 2] = f[2]; d[o + 3] = 255;
+            continue;
+          }
+          if (t < 0.07) level += 1;
+          else if (t > 0.93) level -= 1;
+          const c = ground[Math.max(0, Math.min(4, Math.round(level)))];
           d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+        }
+      }
+    }
+
+    // decorations stand upright on the ground, drawn back-to-front so near ones overlap far ones
+    function drawDecor(world, d, W, H) {
+      if (!world.decor || !world.decor.length) return;
+      const r = world.crect, sl = slots[world.slot], R = radius * sl.s, m = world.rot;
+      const ox = stage.clientWidth / 2 + sl.x - r.left, oy = stage.clientHeight / 2 + sl.y - r.top;
+      const list = [];
+      for (const o of world.decor) {
+        const p = o.p;
+        const z = m[2][0]*p[0] + m[2][1]*p[1] + m[2][2]*p[2];
+        if (z < 0.18) continue;                             // too close to the edge, or round the back
+        const k = persp / (persp - z * R);
+        const gw = o.sprite.rows[0].length;
+        const want = o.size * R * k / trailPix / gw;        // how many canvas pixels per sprite pixel
+        if (want < 0.55) continue;                          // too small to read (the little side planets)
+        list.push([(oy + (m[1][0]*p[0] + m[1][1]*p[1] + m[1][2]*p[2]) * R * k) / trailPix,
+                   (ox + (m[0][0]*p[0] + m[0][1]*p[1] + m[0][2]*p[2]) * R * k) / trailPix,
+                   Math.max(1, Math.round(want)), o]);
+      }
+      list.sort((a, b) => a[0] - b[0]);
+      for (const [sy, sx, sc, o] of list) {
+        const rows = o.sprite.rows, gw = rows[0].length, gh = rows.length;
+        const x0 = Math.round(sx - gw * sc / 2), y0 = Math.round(sy - gh * sc);
+        for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+          const ch = rows[j][i];
+          if (ch === ".") continue;
+          const c = o.rgb[ch];
+          for (let yy = 0; yy < sc; yy++) {
+            const Y = y0 + j * sc + yy;
+            if (Y < 0 || Y >= H) continue;
+            for (let xx = 0; xx < sc; xx++) {
+              const X = x0 + i * sc + xx;
+              if (X < 0 || X >= W) continue;
+              const q = (Y * W + X) * 4;
+              d[q] = c[0]; d[q + 1] = c[1]; d[q + 2] = c[2]; d[q + 3] = 255;
+            }
+          }
         }
       }
     }
@@ -1817,14 +2050,16 @@
     }
     function tryMove(world, dir, dist) {
       const flying = settings.character === "ptero";
-      const free = flying || world.data.open;               // the open world has no trails to follow
+      const free = flying || world.data.open || TRAIL_LOOSENESS >= 50;   // no need to stay on the trails
       const water = !flying && world.lakes;                  // ...but sheep and cars can't swim
+      // where a road crosses water it works as a bridge
+      const onBridge = q => world.trailPts.length && trailCloseness(world, q) > Math.cos(PATH_WIDTH * 0.75);
       const now = free ? 1 : trailCloseness(world, world.rot[2]);
       const tries = free && !water ? [0] : [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4];
       for (const off of tries) {
         const a = dir + off;
         const R2 = mulMM(axisAngle([-Math.cos(a), -Math.sin(a), 0], dist * Math.cos(off)), world.rot);
-        if (water && lakeDepth(world, R2[2]) > -0.02) continue;
+        if (water && lakeDepth(world, R2[2]) > -0.02 && !onBridge(R2[2])) continue;
         if (!free) {
           const near = trailCloseness(world, R2[2]);
           if (near < TRAIL_SLACK && near <= now + 1e-7) continue;
