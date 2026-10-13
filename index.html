@@ -54,8 +54,8 @@
       min-height: 560px;
       overflow: hidden;
     }
-    #gear, #settings, #joystick, .arrow { transition: opacity 0.2s; }
-    body.past-planets #gear, body.past-planets #settings,
+    #switchChar, #joystick, .arrow { transition: opacity 0.2s; }
+    body.past-planets #switchChar,
     body.past-planets #joystick, body.past-planets .arrow { opacity: 0; pointer-events: none; }
     #stage {
       position: absolute;
@@ -166,74 +166,28 @@
     }
 
     /* ---------- settings ---------- */
-    #gear {
+    /* switch-character button: shows the character you are now */
+    #switchChar {
       position: fixed;
       left: 1rem; bottom: 1rem;
-      width: 2.4rem; height: 2.4rem;
+      width: 3rem; height: 3rem;
       border-radius: 50%;
       border: 1px solid #e2e2e2;
-      background: rgba(255,255,255,0.9);
-      padding: 0;
-      color: var(--muted);
+      background: rgba(255,255,255,0.92);
+      padding: 0.45rem;
       cursor: pointer;
       z-index: 60;
-      transition: color 0.2s, border-color 0.2s;
+      transition: border-color 0.2s, transform 0.15s;
     }
-    #gear:hover { color: var(--text); border-color: var(--accent); }
-    #gear svg { display: block; margin: auto; }
-    #settings {
-      position: fixed;
-      left: 1rem; bottom: 4rem;
-      width: 15rem;
-      padding: 1rem;
-      background: #fff;
-      border: 1px solid #e6e6e6;
-      border-radius: 10px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-      font-family: system-ui, sans-serif;
-      font-size: 0.8rem;
-      z-index: 60;
-      display: none;
-    }
-    #settings.open { display: block; }
-    .set-row { display: block; margin-bottom: 0.9rem; }
-    .set-label {
-      display: flex;
-      justify-content: space-between;
-      color: var(--muted);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-size: 0.68rem;
-      margin-bottom: 0.35rem;
-    }
-    .set-label output { color: var(--text); letter-spacing: 0; }
-    #settings input[type=range] { width: 100%; accent-color: var(--accent); }
-    .seg { display: flex; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
-    .seg button {
-      flex: 1;
-      border: none;
-      background: #fff;
-      padding: 0.4rem;
-      font: inherit;
-      cursor: pointer;
-      color: var(--muted);
-    }
-    .seg button.on { background: var(--text); color: #fff; }
-    #resetSettings {
-      border: none;
-      background: none;
-      color: var(--muted);
-      font: inherit;
-      text-decoration: underline;
-      cursor: pointer;
-      padding: 0;
-    }
+    #switchChar:hover { border-color: var(--accent); }
+    #switchChar:active { transform: scale(0.92); }
+    #switchChar svg { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 
     /* ---------- touch joystick ---------- */
     #joystick {
       display: none;
       position: fixed;
-      left: 50%; bottom: 1.1rem;
+      left: 50%; bottom: 2rem;
       width: 7rem; height: 7rem;
       margin-left: -3.5rem;
       border-radius: 50%;
@@ -511,8 +465,7 @@
       .home-title { top: 4.4rem; padding: 0.2rem 1rem 0.45rem; }
       .hint { display: none; }
       .arrow { font-size: 2rem; padding: 0.5rem; }
-      #gear { bottom: 1.1rem; }
-      #settings { bottom: 4.2rem; }
+      #switchChar { bottom: 2.2rem; }
     }
   </style>
 </head>
@@ -526,7 +479,7 @@
       <h1>Sean O'Donovan</h1>
       <div id="planet-name"></div>
       <div id="planet-sub"></div>
-      <div class="hint"><b>W A S D</b> or <b>arrow keys</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
+      <div class="hint"><b>W A S D</b> or <b>arrow keys</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> or the button bottom-left to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
     </div>
 
     <!-- the character: an 8-bit sheep or car (drawn by the script below) -->
@@ -535,47 +488,8 @@
     <!-- touch controls (only shown on phones / tablets) -->
     <div id="joystick" aria-label="Move"><div class="knob"></div></div>
 
-    <!-- settings -->
-    <button id="gear" aria-label="Settings">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-        <line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.2" fill="#fff"/>
-        <line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.2" fill="#fff"/>
-      </svg>
-    </button>
-    <div id="settings">
-      <div class="set-row">
-        <span class="set-label">Character</span>
-        <div class="seg">
-          <button data-char="sheep">Sheep</button>
-          <button data-char="car">Car</button>
-          <button data-char="ptero">Pterodactyl</button>
-        </div>
-      </div>
-      <div class="set-row">
-        <span class="set-label">Planet</span>
-        <div class="seg">
-          <button data-ground="clear">Clear</button>
-          <button data-ground="grass">Solid</button>
-        </div>
-      </div>
-      <label class="set-row">
-        <span class="set-label">Planet size <output id="sizeOut"></output></span>
-        <input id="sizeInput" type="range" min="0" max="1000" step="1">
-      </label>
-      <label class="set-row">
-        <span class="set-label">Speed <output id="speedOut"></output></span>
-        <input id="speedInput" type="range" min="0" max="1000" step="1">
-      </label>
-      <label class="set-row">
-        <span class="set-label">Character size <output id="charOut"></output></span>
-        <input id="charInput" type="range" min="0" max="1000" step="1">
-      </label>
-      <label class="set-row">
-        <span class="set-label">Photo pixels <output id="pixOut"></output></span>
-        <input id="pixInput" type="range" min="0" max="12" step="1">
-      </label>
-      <button id="resetSettings">Reset</button>
-    </div>
+    <!-- switch character (sheep -> car -> pterodactyl) -->
+    <button id="switchChar" aria-label="Switch character" title="Switch character (C)"></button>
     <button class="arrow" id="prevPlanet" aria-label="Previous planet">&#8249;</button>
     <button class="arrow" id="nextPlanet" aria-label="Next planet">&#8250;</button>
   </section>
@@ -722,11 +636,11 @@
     const TRAIL_LOOSENESS = 100;    // how far the sheep / car can stray from a trail, in trail widths
                                     // (100 = go anywhere, 6 = very loose, 3 = loose, 1 = right on the trail)
 
-    // Starting values. Visitors can change these with the gear button on the page.
-    const CHARACTER = "car";        // "sheep", "car" or "ptero" (pterodactyl)
+    // How the planets and character look and move (visitors can switch character with the button bottom-left).
+    const CHARACTER = "sheep";      // "sheep", "car" or "ptero" (pterodactyl): what everyone starts as
     const PLANET_SIZE = 1.85;       // size of the main planet (1.2 = 20% bigger, up to 10)
     const SPEED = 1;                // how fast the character moves (2 = twice as fast, up to 10)
-    const PHOTO_PIXELS = 20;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
+    const PHOTO_PIXELS = 32;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
     const GROUND = "grass";         // "grass" (solid 8-bit ground, themed per planet) or "clear" (see-through planet)
     const CHARACTER_SIZE = 0.85;    // size of the sheep / car / pterodactyl (2 = twice as big)
     const FLYING_ZOOM = 0.8;        // the world shrinks to this size while you fly the pterodactyl (1 = no change)
@@ -1803,8 +1717,10 @@
         const column = Math.min(300, w * 0.24);
         const mini = Math.min(0.3 * baseRadius, (vh - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
         slots.push({ x: (w - column) / 2 - w / 2 + 30, y: mainY - H / 2, s: 1 });
+        // the column of small planets is centred on the middle of the main planet
+        const gap = (vh - 60) / minis;
         for (let k = 0; k < minis; k++) {
-          slots.push({ x: w / 2 - column / 2, y: 30 + (vh - 60) * (k + 0.5) / minis - H / 2 - 12, s: mini });
+          slots.push({ x: w / 2 - column / 2, y: mainY + (k - (minis - 1) / 2) * gap - H / 2 - 12, s: mini });
         }
       } else {
         // phones: main planet at the top, small planets in a row underneath it
@@ -1825,7 +1741,7 @@
       updateControls();
     }
 
-    // the gear, arrows and touch buttons stay on screen while you're on the planets, and hide below them
+    // the switch button, arrows and joystick stay on screen while you're on the planets, and hide below them
     let scrollLimit = null;
     function updateControls() {
       if (scrollLimit && performance.now() < scrollLimit.until && window.scrollY > scrollLimit.y + 1) {
@@ -1999,8 +1915,7 @@
       settings.character = CHARACTERS.includes(kind) ? kind : "sheep";
       lookFor(heroEl);
       lookFor(sceneHero);
-      document.querySelectorAll("[data-char]").forEach(b => b.classList.toggle("on", b.dataset.char === settings.character));
-      saveSettings();
+      showSwitchButton();
       placeHero();
       if (scene && settings.character === "ptero") leaveScene();   // the pterodactyl can't go inside photos
     }
@@ -2264,90 +2179,30 @@
     joyEl.addEventListener("pointercancel", joyEnd);
     joyEl.addEventListener("contextmenu", e => e.preventDefault());
 
-    // ================= settings panel =================
-    const settings = { character: ["sheep", "car", "ptero"].includes(CHARACTER) ? CHARACTER : "sheep", charSize: CHARACTER_SIZE, size: PLANET_SIZE, speed: SPEED, ground: GROUND === "grass" ? "grass" : "clear",
-                       pixels: PIXEL_STEPS.includes(PHOTO_PIXELS) ? PHOTO_PIXELS : 32 };
-    const SIZE_RANGE = [0.5, 10], SPEED_RANGE = [0.25, 10], CHAR_RANGE = [0.5, 3];
-    try {
-      const saved = JSON.parse(localStorage.getItem("planetSettings") || "{}");
-      if (saved.character === "bird") saved.character = "ptero";             // older saved setting
-      if (["sheep", "car", "ptero"].includes(saved.character)) settings.character = saved.character;
-      if (saved.charSize >= CHAR_RANGE[0] && saved.charSize <= CHAR_RANGE[1]) settings.charSize = saved.charSize;
-      if (saved.size >= SIZE_RANGE[0] && saved.size <= SIZE_RANGE[1]) settings.size = saved.size;
-      if (saved.speed >= SPEED_RANGE[0] && saved.speed <= SPEED_RANGE[1]) settings.speed = saved.speed;
-      if (saved.ground === "grass" || saved.ground === "clear") settings.ground = saved.ground;
-      if (PIXEL_STEPS.includes(saved.pixels)) settings.pixels = saved.pixels;
-    } catch (e) {}
-    function saveSettings() {
-      try { localStorage.setItem("planetSettings", JSON.stringify(settings)); } catch (e) {}
-    }
-
-    // the sliders run on a curve so small values are as easy to pick as big ones
-    const toSlider = (v, [lo, hi]) => Math.round(1000 * Math.log(v / lo) / Math.log(hi / lo));
-    const fromSlider = (t, [lo, hi]) => lo * Math.pow(hi / lo, t / 1000);
-    const nice = v => v < 2 ? Math.round(v * 20) / 20 : v < 5 ? Math.round(v * 4) / 4 : Math.round(v * 2) / 2;
-
-    const panel = document.getElementById("settings");
-    document.getElementById("gear").addEventListener("click", () => panel.classList.toggle("open"));
-    document.querySelectorAll("[data-char]").forEach(b => b.addEventListener("click", () => setCharacter(b.dataset.char)));
-    const sizeInput = document.getElementById("sizeInput"), sizeOut = document.getElementById("sizeOut");
-    const speedInput = document.getElementById("speedInput"), speedOut = document.getElementById("speedOut");
-    function showSettings() {
-      sizeInput.value = toSlider(settings.size, SIZE_RANGE);
-      speedInput.value = toSlider(settings.speed, SPEED_RANGE);
-      sizeOut.textContent = settings.size + "\u00d7";
-      speedOut.textContent = settings.speed + "\u00d7";
-    }
-    sizeInput.addEventListener("input", () => {
-      settings.size = nice(fromSlider(+sizeInput.value, SIZE_RANGE));
-      sizeOut.textContent = settings.size + "\u00d7";
-      saveSettings();
-      if (!transition) layout();
-    });
-    speedInput.addEventListener("input", () => {
-      settings.speed = nice(fromSlider(+speedInput.value, SPEED_RANGE));
-      speedOut.textContent = settings.speed + "\u00d7";
-      saveSettings();
-    });
-    const charInput = document.getElementById("charInput"), charOut = document.getElementById("charOut");
-    const showCharSize = () => {
-      charInput.value = toSlider(settings.charSize, CHAR_RANGE);
-      charOut.textContent = settings.charSize + "\u00d7";
+    // ================= settings =================
+    // These come straight from the values near the top of the script (there's no settings panel).
+    const settings = {
+      character: ["sheep", "car", "ptero"].includes(CHARACTER) ? CHARACTER : "sheep",
+      charSize: CHARACTER_SIZE, size: PLANET_SIZE, speed: SPEED,
+      ground: GROUND === "grass" ? "grass" : "clear",
+      pixels: PIXEL_STEPS.includes(PHOTO_PIXELS) ? PHOTO_PIXELS : 32
     };
-    charInput.addEventListener("input", () => {
-      settings.charSize = nice(fromSlider(+charInput.value, CHAR_RANGE));
-      showCharSize(); saveSettings(); placeHero();
-    });
-    showCharSize();
-    const pixInput = document.getElementById("pixInput"), pixOut = document.getElementById("pixOut");
-    const showPixels = () => {
-      pixInput.value = PIXEL_STEPS.indexOf(settings.pixels);
-      pixOut.textContent = settings.pixels ? settings.pixels + " px wide" : "Full";
-    };
-    pixInput.addEventListener("input", () => {
-      settings.pixels = PIXEL_STEPS[+pixInput.value];
-      showPixels(); saveSettings(); pixelateAll();
-    });
-    showPixels();
+    function saveSettings() {}            // nothing is remembered between visits
 
-    function setGround(kind) {
-      settings.ground = kind === "grass" ? "grass" : "clear";
-      document.querySelectorAll("[data-ground]").forEach(b => b.classList.toggle("on", b.dataset.ground === settings.ground));
-      worlds.forEach(w => w.pathsDirty = true);
-      saveSettings();
+    // the switch-character button shows the character you are now; tap / click it for the next one
+    const switchBtn = document.getElementById("switchChar");
+    const BUTTON_ART = {
+      sheep: pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_A], SHEEP_COLORS, ""),
+      car: pixelArt(CAR, CAR_COLORS, ""),
+      ptero: pixelArt(PTERO_UP, PTERO_COLORS, "")
+    };
+    function showSwitchButton() {
+      switchBtn.innerHTML = BUTTON_ART[settings.character];
+      switchBtn.setAttribute("aria-label", "Switch character (now: " + ({ sheep: "sheep", car: "car", ptero: "pterodactyl" })[settings.character] + ")");
     }
-    document.querySelectorAll("[data-ground]").forEach(b => b.addEventListener("click", () => setGround(b.dataset.ground)));
-    setGround(settings.ground);
-    document.getElementById("resetSettings").addEventListener("click", () => {
-      setGround(GROUND);
-      settings.size = PLANET_SIZE; settings.speed = SPEED;
-      settings.pixels = PIXEL_STEPS.includes(PHOTO_PIXELS) ? PHOTO_PIXELS : 32;
-      settings.charSize = CHARACTER_SIZE;
-      showPixels(); pixelateAll(); showCharSize();
-      showSettings(); saveSettings(); setCharacter(CHARACTER);
-      if (!transition) layout();
+    switchBtn.addEventListener("click", () => {
+      setCharacter(CHARACTERS[(CHARACTERS.indexOf(settings.character) + 1) % CHARACTERS.length]);
     });
-    showSettings();
 
     document.getElementById("prevPlanet").addEventListener("click", () => goToPlanet(focused - 1));
     document.getElementById("nextPlanet").addEventListener("click", () => goToPlanet(focused + 1));
