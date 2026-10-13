@@ -305,6 +305,7 @@
     .tile.pixel img { display: none; }
     .tile.back, .tile.empty, .tile.inactive { pointer-events: none; }
     .tile.empty { background: #bdbdbd; }
+    .tile.offstage { display: none; }
     .tile:not(.back):not(.inactive):hover img, .tile:not(.back):not(.inactive):hover canvas { filter: brightness(1.08); }
     /* progress bar that fills while hovering */
     .tile::after {
@@ -634,6 +635,21 @@
           { file: "images/ireland2.jpg", caption: "" },
           { file: "images/ireland3.jpg", caption: "" },
           { file: "images/ireland4.jpg", caption: "" },
+          { file: "images/ireland5.jpg", caption: "" },
+          { file: "images/ireland6.jpg", caption: "" },
+          { file: "images/ireland7.jpg", caption: "" },
+          { file: "images/ireland8.jpg", caption: "" },
+          { file: "images/ireland9.jpg", caption: "" },
+          { file: "images/ireland10.jpg", caption: "" },
+          { file: "images/ireland11.jpg", caption: "" },
+          { file: "images/ireland12.jpg", caption: "" },
+          { file: "images/ireland13.jpg", caption: "" },
+          { file: "images/ireland14.jpg", caption: "" },
+          { file: "images/ireland15.jpg", caption: "" },
+          { file: "images/ireland16.jpg", caption: "" },
+          { file: "images/ireland17.jpg", caption: "" },
+          { file: "images/ireland18.jpg", caption: "" },
+          { file: "images/ireland19.jpg", caption: "" },
         ]
       },
       {
@@ -643,6 +659,9 @@
           { file: "images/USA2.jpg", caption: "" },
           { file: "images/USA3.jpg", caption: "" },
           { file: "images/USA4.jpg", caption: "" },
+          { file: "images/USA5.jpg", caption: "" },
+          { file: "images/USA6.jpg", caption: "" },
+          { file: "images/USA7.jpg", caption: "" },
         ]
       },
       {
@@ -661,6 +680,13 @@
           { file: "images/friends2.jpg", caption: "" },
           { file: "images/friends3.jpg", caption: "" },
           { file: "images/friends4.jpg", caption: "" },
+          { file: "images/friends5.jpg", caption: "" },
+          { file: "images/friends6.jpg", caption: "" },
+          { file: "images/friends7.jpg", caption: "" },
+          { file: "images/friends8.jpg", caption: "" },
+          { file: "images/friends9.jpg", caption: "" },
+          { file: "images/friends10.jpg", caption: "" },
+          { file: "images/friends11.jpg", caption: "" },
         ]
       },
       {
@@ -821,6 +847,27 @@
       tile.el.classList.add("pixel");
     }
     function pixelateAll() { pixelTiles.forEach(pixelateTile); }
+
+    // ---------- loading photos: the planet you're on first, then the others quietly in the background ----------
+    const planetLoads = new Map();
+    function loadPlanet(world) {
+      if (planetLoads.has(world)) return planetLoads.get(world);
+      const files = [...new Set(world.data.photos.map(p => p.file))];
+      const done = Promise.all(files.map(f => sourceFor(f).ready));
+      for (const t of world.tiles) {
+        if (!t.photo) continue;
+        sourceFor(t.photo.file).ready.then(() => {
+          if (!t.img.getAttribute("src")) t.img.src = t.photo.file;   // already downloaded, so this is instant
+          pixelateTile(t);
+        });
+      }
+      planetLoads.set(world, done);
+      return done;
+    }
+    async function loadAllPlanets() {
+      await loadPlanet(worlds[focused]);
+      for (const w of worlds) await loadPlanet(w);       // one planet at a time, so they don't compete
+    }
 
     // ---------- trails and photos ----------
     // A few winding main trails loop around the planet. Photos sit beside the trails, alternating
@@ -983,8 +1030,7 @@
         const tile = { el, img: null, p, photo: null, world, lag: 0 };
         if (photos.length) {
           const photo = photos[i % photos.length];
-          const img = new Image();
-          img.src = photo.file;
+          const img = new Image();               // its photo is filled in when this planet's turn to load comes
           img.alt = photo.caption || world.data.name;
           img.draggable = false;
           el.appendChild(img);
@@ -996,7 +1042,6 @@
           tile.photo = photo;
           attachHover(tile);
           pixelTiles.push(tile);
-          sourceFor(photo.file).ready.then(() => pixelateTile(tile));
         } else {
           el.classList.add("empty");
         }
@@ -1006,11 +1051,11 @@
     }
 
     // put one photo at a point in 3D (pixels from the middle of the screen)
-    function place(t, x, y, z, s, facing, boost = 0) {
+    function place(t, x, y, z, s, facing, boost = 0, alpha = 1) {
       t.el.style.transform = `translate3d(${x}px,${y}px,${z}px) scale(${s})`;
       t.el.style.zIndex = Math.round(z + 20000 + boost);
       // photos facing you are solid; only ones turning away toward the edge fade out
-      t.el.style.opacity = facing > 0 ? Math.min(1, 0.55 + facing * 1.6) : 0.1 + 0.2 * (1 + facing);
+      t.el.style.opacity = alpha * (facing > 0 ? Math.min(1, 0.55 + facing * 1.6) : 0.1 + 0.2 * (1 + facing));
       const isBack = facing < 0.1;
       if (isBack !== t.el.classList.contains("back")) {
         t.el.classList.toggle("back", isBack);
@@ -1024,12 +1069,21 @@
     }
 
     // a planet sitting still in its spot
+    function setOffstage(world, off) {
+      if (world.offstage === off) return;
+      world.offstage = off;
+      world.tiles.forEach(t => t.el.classList.toggle("offstage", off));
+    }
     function drawResting(world) {
       const { x, y, s } = slots[world.slot];
       const boost = world.slot === 0 ? 0 : 30000;     // small planets always sit on top of a huge main planet
-      for (const t of world.tiles) {
-        const c = mulMV(world.rot, t.p);
-        place(t, x + c[0]*radius*s, y + c[1]*radius*s, c[2]*radius*s, s, c[2], boost);
+      // the small planets on the side are just previews: the planet and its trails, no photos
+      setOffstage(world, world.slot !== 0);
+      if (world.slot === 0) {
+        for (const t of world.tiles) {
+          const c = mulMV(world.rot, t.p);
+          place(t, x + c[0]*radius*s, y + c[1]*radius*s, c[2]*radius*s, s, c[2], boost);
+        }
       }
       world.canvas.style.zIndex = 20000 + boost;
       placeGlow(world, x, y, 0, s);
@@ -1297,14 +1351,14 @@
       return out;
     }
 
-    function drawTravel(world, S, E, side, T) {
+    function drawTravel(world, S, E, side, T, photoAlpha = 1) {
       const g = 0.5 - 0.5 * Math.cos(Math.PI * T);      // gentle start and finish, no pause in the middle
       const ringness = Math.sqrt(Math.sin(Math.PI * g)); // 0 = sphere, 1 = tube
       const tube = radius * TUBE_SIZE;
       const out = [0, 0, 0, 0, 0];
       for (const t of world.tiles) {
         travelPos(mulMV(world.rot, t.p), t.lag, S, E, side, g, ringness, tube, out);
-        place(t, out[0], out[1], out[2], out[3], out[4]);
+        place(t, out[0], out[1], out[2], out[3], out[4], 0, photoAlpha);
       }
       const P = arcPoint(S, E, g, side);
       placeGlow(world, P[0], P[1], P[2], lerp(S.s, E.s, g), 1 - ringness);
@@ -1390,6 +1444,7 @@
 
       const from = worlds[focused], to = worlds[i];
       const mainSpot = from.slot, otherSpot = to.slot;
+      loadPlanet(to);                      // jump the queue if its photos aren't downloaded yet
 
       const S1 = slots[mainSpot], E1 = slots[otherSpot];
       const animate = !reduceMotion;
@@ -1410,6 +1465,8 @@
         capturePixels(to, E1, S1);
         travelCanvas.width = stage.clientWidth;
         travelCanvas.height = stage.clientHeight;
+        setOffstage(from, false);
+        setOffstage(to, false);
         transition = { from, to, S1, E1, start: performance.now() };
         worlds.forEach(w => w.label.classList.add("hidden"));
         from.pathAlpha = to.pathAlpha = 0;
@@ -1425,8 +1482,10 @@
       const { from, to, S1, E1, start } = transition;
       const T = clamp01((now - start) / TRANSITION_TIME);
       travelCtx.clearRect(0, 0, travelCanvas.width, travelCanvas.height);
-      drawTravel(from, S1, E1, -1, T);   // leaving: dives into the screen
-      drawTravel(to, E1, S1, +1, T);     // arriving: comes out of the screen toward you
+      // photos fade out as a planet heads to the side, and fade in on the planet that's arriving
+      const smooth = x => x * x * (3 - 2 * x);
+      drawTravel(from, S1, E1, -1, T, 1 - smooth(clamp01((T - 0.65) / 0.35)));   // leaving: dives into the screen
+      drawTravel(to, E1, S1, +1, T, smooth(clamp01(T / 0.35)));                   // arriving: comes out toward you
       if (T >= 1) {
         transition = null;
         from.dirty = to.dirty = true;
@@ -1492,7 +1551,11 @@
       // how far the planet reaches from its centre on screen, photo frames included
       const reach = radius * persp / (persp - radius) * 1.1;
       const H = Math.max(vh, Math.ceil(reach * 2 + top + bottom));
+      const wasOnPlanets = !document.body.classList.contains("past-planets");
       homeEl.style.height = (bandBottom + H) + "px";
+      // if the planet screen just got shorter while you were on it, don't leave you stranded below it
+      const lowest = homeEl.offsetTop + homeEl.offsetHeight - window.innerHeight;
+      if (wasOnPlanets && window.scrollY > lowest) window.scrollTo({ top: Math.max(0, lowest), behavior: "instant" });
       const mainY = top + Math.max(reach, (vh - top - bottom) / 2);   // centred if it fits, otherwise fully below the title
       slots = [];
       if (!narrow) {
@@ -2172,6 +2235,7 @@
     updateLabels();
     window.addEventListener("resize", layout);
     requestAnimationFrame(tick);
+    loadAllPlanets();
 
     // ---------- galleries (one section per planet) ----------
     const allPhotos = [];
