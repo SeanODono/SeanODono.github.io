@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sean O'Dono Photography</title>
+  <title>Sean O'Donovan Photography</title>
   <meta name="description" content="Landscape, wildlife and travel photography">
   <style>
     :root {
@@ -36,7 +36,9 @@
     }
     nav a {
       color: var(--text);
-      text-decoration: none;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.3em;
       font-family: system-ui, sans-serif;
       font-size: 0.78rem;
       letter-spacing: 0.12em;
@@ -52,13 +54,13 @@
       min-height: 560px;
       overflow: hidden;
     }
-    #gear, #settings, #dpad, .arrow { transition: opacity 0.2s; }
+    #gear, #settings, #joystick, .arrow { transition: opacity 0.2s; }
     body.past-planets #gear, body.past-planets #settings,
-    body.past-planets #dpad, body.past-planets .arrow { opacity: 0; pointer-events: none; }
+    body.past-planets #joystick, body.past-planets .arrow { opacity: 0; pointer-events: none; }
     #stage {
       position: absolute;
       inset: 0;
-      touch-action: none;
+      touch-action: manipulation;   /* swipes scroll the page; taps still open photos and switch planets */
       user-select: none;
       -webkit-user-select: none;
       perspective-origin: 50% 50%;
@@ -171,14 +173,14 @@
       border-radius: 50%;
       border: 1px solid #e2e2e2;
       background: rgba(255,255,255,0.9);
-      font-size: 1.3rem;
-      line-height: 1;
+      padding: 0;
       color: var(--muted);
       cursor: pointer;
       z-index: 60;
-      transition: color 0.2s, transform 0.4s;
+      transition: color 0.2s, border-color 0.2s;
     }
-    #gear:hover { color: var(--text); transform: rotate(60deg); }
+    #gear:hover { color: var(--text); border-color: var(--accent); }
+    #gear svg { display: block; margin: auto; }
     #settings {
       position: fixed;
       left: 1rem; bottom: 4rem;
@@ -227,33 +229,34 @@
       padding: 0;
     }
 
-    /* ---------- touch pad ---------- */
-    #dpad {
+    /* ---------- touch joystick ---------- */
+    #joystick {
       display: none;
       position: fixed;
-      left: 50%; bottom: 1rem;
-      transform: translateX(-50%);
-      gap: 0.5rem;
-      z-index: 400;            /* stays usable while you're inside a photo */
-    }
-    #dpad button {
-      width: 2.8rem; height: 2.8rem;
+      left: 50%; bottom: 1.1rem;
+      width: 7rem; height: 7rem;
+      margin-left: -3.5rem;
       border-radius: 50%;
       border: 1px solid #ddd;
-      background: rgba(255,255,255,0.85);
-      color: var(--muted);
-      font-size: 0.9rem;
+      background: rgba(255,255,255,0.55);
+      backdrop-filter: blur(2px);
       touch-action: none;
       -webkit-user-select: none;
       user-select: none;
+      z-index: 400;            /* stays usable while you're inside a photo */
     }
-    #dpad button.pressed { background: var(--text); color: #fff; }
-    #dpad [data-key=KeyA] { order: 1; }
-    #dpad [data-key=KeyW] { order: 2; }
-    #dpad [data-key=KeyS] { order: 3; }
-    #dpad [data-key=KeyD] { order: 4; }
+    #joystick .knob {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 2.9rem; height: 2.9rem;
+      margin: -1.45rem 0 0 -1.45rem;
+      border-radius: 50%;
+      background: rgba(26,26,26,0.82);
+      transition: transform 0.12s;
+    }
+    #joystick.active .knob { transition: none; }
     @media (hover: none) and (pointer: coarse) {
-      #dpad { display: flex; }
+      #joystick { display: block; }
     }
 
     .tile, .glow {
@@ -502,14 +505,14 @@
     #next { right: 0.5rem; }
 
     @media (max-width: 700px) {
-      .videos, .gallery { grid-template-columns: 1fr; }
+      .videos { grid-template-columns: 1fr; }
+      .gallery { grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
       nav { gap: 0.4rem 0.9rem; }
       .home-title { top: 4.4rem; padding: 0.2rem 1rem 0.45rem; }
       .hint { display: none; }
       .arrow { font-size: 2rem; padding: 0.5rem; }
-      #gear { bottom: 4.3rem; }
-      #settings { bottom: 7.3rem; }
-      #dpad { bottom: 1rem; }
+      #gear { bottom: 1.1rem; }
+      #settings { bottom: 4.2rem; }
     }
   </style>
 </head>
@@ -520,7 +523,7 @@
   <section id="home">
     <div id="stage"></div>
     <div class="home-title">
-      <h1>Sean O'Dono</h1>
+      <h1>Sean O'Donovan</h1>
       <div id="planet-name"></div>
       <div id="planet-sub"></div>
       <div class="hint"><b>W A S D</b> or <b>arrow keys</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a small planet to travel there</div>
@@ -530,15 +533,15 @@
     <div id="hero" aria-hidden="true"></div>
 
     <!-- touch controls (only shown on phones / tablets) -->
-    <div id="dpad">
-      <button data-key="KeyW" aria-label="Up">&#9650;</button>
-      <button data-key="KeyA" aria-label="Left">&#9664;</button>
-      <button data-key="KeyD" aria-label="Right">&#9654;</button>
-      <button data-key="KeyS" aria-label="Down">&#9660;</button>
-    </div>
+    <div id="joystick" aria-label="Move"><div class="knob"></div></div>
 
     <!-- settings -->
-    <button id="gear" aria-label="Settings">&#9881;</button>
+    <button id="gear" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.2" fill="#fff"/>
+        <line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.2" fill="#fff"/>
+      </svg>
+    </button>
     <div id="settings">
       <div class="set-row">
         <span class="set-label">Character</span>
@@ -608,7 +611,7 @@
     </div>
   </section>
 
-  <footer>&copy; <span id="year"></span> Sean O'Dono. All rights reserved.</footer>
+  <footer>&copy; <span id="year"></span> Sean O'Donovan. All rights reserved.</footer>
 
   <div id="lightbox">
     <button id="close" aria-label="Close">&times;</button>
@@ -1787,8 +1790,12 @@
       const wasOnPlanets = !document.body.classList.contains("past-planets");
       homeEl.style.height = (bandBottom + H) + "px";
       // if the planet screen just got shorter while you were on it, don't leave you stranded below it
-      const lowest = homeEl.offsetTop + homeEl.offsetHeight - window.innerHeight;
-      if (wasOnPlanets && window.scrollY > lowest) window.scrollTo({ top: Math.max(0, lowest), behavior: "instant" });
+      const lowest = Math.max(0, homeEl.offsetTop + homeEl.offsetHeight - window.innerHeight);
+      if (wasOnPlanets) {
+        if (window.scrollY > lowest) window.scrollTo({ top: lowest, behavior: "instant" });
+        // a smooth glide that was already under way could still carry the page past the planets, so hold the limit briefly
+        scrollLimit = { y: lowest, until: performance.now() + 900 };
+      }
       const mainY = top + Math.max(reach, (vh - top - bottom) / 2);   // centred if it fits, otherwise fully below the title
       slots = [];
       if (!narrow) {
@@ -1819,7 +1826,11 @@
     }
 
     // the gear, arrows and touch buttons stay on screen while you're on the planets, and hide below them
+    let scrollLimit = null;
     function updateControls() {
+      if (scrollLimit && performance.now() < scrollLimit.until && window.scrollY > scrollLimit.y + 1) {
+        window.scrollTo({ top: scrollLimit.y, behavior: "instant" });
+      }
       const homeBottom = homeEl.offsetTop + homeEl.offsetHeight;
       document.body.classList.toggle("past-planets", window.scrollY + window.innerHeight * 0.45 > homeBottom);
     }
@@ -2002,8 +2013,9 @@
 
     // W A S D move up, left, down and right on the screen. Works the same on the planet and inside a photo.
     function steer(dt, top) {
-      const ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-      const iy = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0);
+      let ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+      let iy = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0);
+      if (joy.active && joy.mag > 0.15) { ix = joy.x; iy = joy.y; top *= Math.min(1, joy.mag * 1.15); }   // a gentle push = slower
       const pressing = ix !== 0 || iy !== 0;
       const want = pressing ? Math.atan2(ix, -iy) : hero.heading;
       if (settings.character === "car") {
@@ -2019,7 +2031,7 @@
           // the sheep just faces left/right; the pterodactyl swings round to face where it's going
           hero.heading = settings.character === "ptero" ? turnToward(hero.heading, want, 12 * dt) : want;
         }
-        if (ix) hero.face = ix > 0 ? 1 : -1;
+        if (Math.abs(ix) > 0.2) hero.face = ix > 0 ? 1 : -1;
         hero.speed += ((pressing ? top : 0) - hero.speed) * Math.min(1, dt * 14);
       }
       if (hero.speed < top * 0.004 && !pressing) hero.speed = 0;
@@ -2223,17 +2235,34 @@
     document.addEventListener("keyup", e => { keys[MOVE_KEYS[e.code] || e.code] = false; });
     window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 
-    // on-screen pad for phones and tablets
-    document.querySelectorAll("#dpad [data-key]").forEach(btn => {
-      const k = btn.dataset.key;
-      const on = e => { e.preventDefault(); showHeroOnScreen(); keys[k] = true; btn.classList.add("pressed"); };
-      const off = () => { keys[k] = false; btn.classList.remove("pressed"); };
-      btn.addEventListener("pointerdown", on);
-      btn.addEventListener("pointerup", off);
-      btn.addEventListener("pointerleave", off);
-      btn.addEventListener("pointercancel", off);
-      btn.addEventListener("contextmenu", e => e.preventDefault());
+    // on-screen joystick for phones and tablets: push in any direction, further = faster
+    const joy = { active: false, x: 0, y: 0, mag: 0, id: null };
+    const joyEl = document.getElementById("joystick"), knob = joyEl.querySelector(".knob");
+    function joyMove(e) {
+      const r = joyEl.getBoundingClientRect(), max = r.width * 0.36;
+      let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy);
+      if (d > max) { dx *= max / d; dy *= max / d; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joy.x = dx / max; joy.y = dy / max; joy.mag = Math.min(1, d / max);
+    }
+    function joyEnd() {
+      joy.active = false; joy.x = joy.y = joy.mag = 0; joy.id = null;
+      joyEl.classList.remove("active");
+      knob.style.transform = "";
+    }
+    joyEl.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      joy.active = true; joy.id = e.pointerId;
+      try { joyEl.setPointerCapture(e.pointerId); } catch (err) {}   // keep tracking the finger even if it slides off
+      joyEl.classList.add("active");
+      showHeroOnScreen();
+      joyMove(e);
     });
+    joyEl.addEventListener("pointermove", e => { if (joy.active && e.pointerId === joy.id) joyMove(e); });
+    joyEl.addEventListener("pointerup", joyEnd);
+    joyEl.addEventListener("pointercancel", joyEnd);
+    joyEl.addEventListener("contextmenu", e => e.preventDefault());
 
     // ================= settings panel =================
     const settings = { character: ["sheep", "car", "ptero"].includes(CHARACTER) ? CHARACTER : "sheep", charSize: CHARACTER_SIZE, size: PLANET_SIZE, speed: SPEED, ground: GROUND === "grass" ? "grass" : "clear",
@@ -2350,7 +2379,6 @@
       if (pressedMini) moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
     });
     function endPress(e) {
-      if (magnified && magnified.pointerType !== "mouse") closeMagnifier();
       if (pressedMini) {
         const target = pressedMini;
         pressedMini = null;
@@ -2359,7 +2387,16 @@
       if (e && e.pointerType !== "mouse") cancelHover();
     }
     window.addEventListener("pointerup", endPress);
-    window.addEventListener("pointercancel", endPress);
+    // a swipe that turns into a page scroll is not a tap on a small planet
+    window.addEventListener("pointercancel", () => { pressedMini = null; cancelHover(); });
+    // touch: tap anywhere to close an open photo
+    window.addEventListener("pointerdown", e => {
+      if (magnified && magnified.pointerType !== "mouse" && e.pointerType !== "mouse" &&
+          performance.now() - magnified.at > 250 && !e.target.closest("#joystick")) {
+        closeMagnifier();
+        e.stopPropagation();
+      }
+    }, true);
 
     // ---------- hover to magnify ----------
     let hoverTile = null, hoverTimer = null, magnified = null;
@@ -2368,7 +2405,22 @@
     const magCap = mag.querySelector(".caption");
 
     function attachHover(tile) {
+      // touch: a quick tap on a photo opens it (a swipe scrolls the page instead)
+      let tap = null;
+      tile.el.addEventListener("pointerdown", e => {
+        if (e.pointerType !== "mouse") tap = { x: e.clientX, y: e.clientY, t: performance.now() };
+      });
+      tile.el.addEventListener("pointerup", e => {
+        if (e.pointerType === "mouse" || !tap) return;
+        const quick = performance.now() - tap.t < 450 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 12;
+        tap = null;
+        if (!quick || magnified || transition || scene || tile.world.idx !== focused) return;
+        if (tile.el.classList.contains("back")) return;
+        magnify(tile, "touch");
+      });
+      tile.el.addEventListener("pointercancel", () => { tap = null; });
       tile.el.addEventListener("pointerenter", e => {
+        if (e.pointerType !== "mouse") return;            // hover-to-open is for the mouse only
         if (magnified || transition || scene || tile.el.classList.contains("back")) return;
         if (tile.world.idx !== focused) return;
         cancelHover();
@@ -2399,7 +2451,7 @@
 
       const r = tile.el.getBoundingClientRect();
       const ratio = tile.img.naturalWidth ? tile.img.naturalWidth / tile.img.naturalHeight : 1.5;
-      let w = Math.min(innerWidth * 0.7, 1000), h = w / ratio;
+      let w = Math.min(innerWidth * (innerWidth < 700 ? 0.94 : 0.7), 1000), h = w / ratio;
       if (h > innerHeight * 0.7) { h = innerHeight * 0.7; w = h * ratio; }
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       const left = Math.max(12, Math.min(cx - w / 2, innerWidth - w - 12));
@@ -2416,7 +2468,7 @@
       mag.classList.add("open");
       Object.assign(mag.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
 
-      magnified = { pointerType };
+      magnified = { pointerType, at: performance.now() };
       hoverTile = null;
       heroEl.classList.add("hidden-for-photo");
     }
