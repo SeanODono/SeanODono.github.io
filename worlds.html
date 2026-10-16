@@ -3,27 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Worlds · Sean O'Donovan Photography</title>
+  <title>Friends · Sean O'Donovan Photography</title>
   <meta name="description" content="Worlds demo: everyone gets their own photo planet">
   <link rel="stylesheet" href="worlds/worlds.css">
 </head>
 <body>
 
-  <nav id="nav">
+  <!-- two tabs: the normal portfolio, and this friends demo -->
+  <nav id="nav" class="tabs">
     <a href="index.html">Portfolio</a>
-    <a href="worlds.html">Worlds</a>
+    <a href="worlds.html" class="active" aria-current="page">Friends</a>
   </nav>
 
   <section id="home">
     <div id="stage"></div>
     <div class="home-title">
-      <h1>Worlds</h1>
+      <h1>Friends</h1>
       <div id="planet-name"></div>
       <div id="planet-sub"></div>
       <div class="worlds-bar">
         <label>Playing as <select id="playingAs" aria-label="Playing as"></select></label>
-        <span class="friends-label">Visit a friend:</span>
-        <span id="friendList"></span>
+        <button class="tool" data-open="friends">Friends</button>
+        <button class="tool" data-open="photos">My photos</button>
+        <button class="tool" data-open="customize">Customize my planet</button>
         <button id="goHome" hidden>&larr; Back to my planet</button>
       </div>
       <div class="hint"><b>W A S D</b> or <b>arrow keys</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> or the button bottom-left to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a friend or a small planet to travel there</div>
@@ -50,6 +52,59 @@
     </div>
     <div id="sceneHint"><b>W A S D</b> or <b>arrow keys</b> to walk around &middot; walk off the photo or into the portal to leave</div>
   </div>
+
+  <!-- side panel (bottom sheet on phones): friends, photos, customize -->
+  <aside id="panel" hidden>
+    <header>
+      <h2 id="panelTitle"></h2>
+      <button id="panelClose" aria-label="Close">&times;</button>
+    </header>
+
+    <div data-panel="friends">
+      <h3>Your friend code</h3>
+      <div class="code-box"><span id="myCode"></span><button id="copyCode">Copy</button></div>
+      <p class="muted">Give this to a friend so they can add you.</p>
+
+      <h3>Add a friend</h3>
+      <form id="addFriend" class="row">
+        <input id="friendCode" placeholder="Their code, e.g. AVA-2R7X" autocomplete="off" spellcheck="false">
+        <button type="submit">Add</button>
+      </form>
+      <p id="addFriendMsg" class="msg"></p>
+      <p class="muted" id="demoCodes"></p>
+
+      <h3>Your friends (<span id="friendCount"></span>)</h3>
+      <div id="friendRows"></div>
+    </div>
+
+    <div data-panel="photos">
+      <label class="add-photos">+ Add photos<input type="file" id="photoInput" accept="image/*" multiple hidden></label>
+      <p id="photoMsg" class="msg"></p>
+      <h3>On your planet (<span id="photoCount"></span>)</h3>
+      <div id="photoGrid"></div>
+      <p class="muted">Each photo is shrunk to 1920&times;1080 at most, plus a small copy for the planet. Demo: photos are kept in this browser only.</p>
+    </div>
+
+    <div data-panel="customize">
+      <label class="field">Planet name <input id="cName" maxlength="40"></label>
+      <label class="field">Subtitle <input id="cSub" maxlength="60"></label>
+      <div class="row">
+        <label class="field">Glow <input type="color" id="cGlow"></label>
+        <label class="field grow">Trails <select id="cTrail"></select></label>
+      </div>
+      <h3>Biomes</h3>
+      <p class="muted">Pick up to 6. The size slider sets how much of the planet each one covers.</p>
+      <div id="biomeRows"></div>
+      <button id="addBiome" class="wide">+ Add a biome</button>
+      <label class="field">Decorations: <b id="cDecorName"></b>
+        <input type="range" id="cDecor" min="0" max="3" step="1">
+      </label>
+      <p id="cStatus" class="msg"></p>
+      <hr>
+      <button id="resetDemo" class="danger">Reset the whole demo</button>
+      <p class="muted">Forgets every change, friend and uploaded photo in this browser.</p>
+    </div>
+  </aside>
 
   <div id="magnifier">
     <img src="" alt="">

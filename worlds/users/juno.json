@@ -1,13 +1,16 @@
 {
   "id": "juno",
   "name": "Juno",
+  "code": "JUNO-5H4P",
   "avatar": {"character": "sheep"},
   "friends": ["sean", "maya"],
   "planet": {
     "name": "Neon Nights",
     "subtitle": "Band shows",
-    "theme": "night",
     "glow": "#8a5cf0",
+    "trail": "neon",
+    "decorations": 2,
+    "biomes": [{"type": "neon", "size": 1}],
     "photos": [
       "images/friends1.jpg",
       "images/friends2.jpg",

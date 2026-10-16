@@ -1,13 +1,22 @@
 {
   "id": "maya",
   "name": "Maya",
+  "code": "MAYA-3F8D",
   "avatar": {"character": "car"},
   "friends": ["sean", "juno"],
   "planet": {
     "name": "Road Trip",
     "subtitle": "Across the USA",
-    "theme": "usa",
     "glow": "#e8a160",
+    "trail": "road",
+    "decorations": 2,
+    "biomes": [
+      {"type": "canyon", "size": 2},
+      {"type": "desert", "size": 2},
+      {"type": "beach", "size": 2},
+      {"type": "mountain", "size": 2},
+      {"type": "plains", "size": 1}
+    ],
     "photos": [
       "images/USA1.jpg",
       "images/USA2.jpg",

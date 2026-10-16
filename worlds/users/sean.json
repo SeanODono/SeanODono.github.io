@@ -1,13 +1,16 @@
 {
   "id": "sean",
   "name": "Sean",
+  "code": "SEAN-7Q2K",
   "avatar": {"character": "sheep"},
   "friends": ["maya", "theo", "juno"],
   "planet": {
     "name": "Ireland",
     "subtitle": "Landscape",
-    "theme": "ireland",
     "glow": "#58b64c",
+    "trail": "stone",
+    "decorations": 2,
+    "biomes": [{"type": "countryside", "size": 1}],
     "photos": [
       "images/ireland1.jpg",
       "images/ireland2.jpg",

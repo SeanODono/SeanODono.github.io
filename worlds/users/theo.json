@@ -1,23 +1,16 @@
 {
   "id": "theo",
   "name": "Theo",
+  "code": "THEO-9K1M",
   "avatar": {"character": "ptero"},
   "friends": ["sean"],
   "planet": {
     "name": "Autumn Woods",
     "subtitle": "Wildlife",
-    "theme": "forest",
     "glow": "#e07b2e",
-    "ground": ["#5a2e14", "#7a3f19", "#9a5420", "#b86d2c", "#d38d45"],
-    "flowers": ["#f2d14b", "#d23a2f"],
     "trail": "dirt",
-    "decor": [
-      ["tree", 22, {"L": "#d9822b", "l": "#f0a845"}],
-      ["tree", 10, {"L": "#b8401f", "l": "#d9622e"}],
-      ["pine", 10],
-      ["rock", 8],
-      ["bush", 6, {"B": "#8a5a1e", "b": "#6e4516"}]
-    ],
+    "decorations": 3,
+    "biomes": [{"type": "autumn", "size": 3}, {"type": "forest", "size": 1}],
     "photos": [
       "images/wild1.jpg",
       "images/wild2.jpg",
