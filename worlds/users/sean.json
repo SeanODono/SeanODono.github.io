@@ -1,0 +1,33 @@
+{
+  "id": "sean",
+  "name": "Sean",
+  "avatar": {"character": "sheep"},
+  "friends": ["maya", "theo", "juno"],
+  "planet": {
+    "name": "Ireland",
+    "subtitle": "Landscape",
+    "theme": "ireland",
+    "glow": "#58b64c",
+    "photos": [
+      "images/ireland1.jpg",
+      "images/ireland2.jpg",
+      "images/ireland3.jpg",
+      "images/ireland4.jpg",
+      "images/ireland5.jpg",
+      "images/ireland6.jpg",
+      "images/ireland7.jpg",
+      "images/ireland8.jpg",
+      "images/ireland9.jpg",
+      "images/ireland10.jpg",
+      "images/ireland11.jpg",
+      "images/ireland12.jpg",
+      "images/ireland13.jpg",
+      "images/ireland14.jpg",
+      "images/ireland15.jpg",
+      "images/ireland16.jpg",
+      "images/ireland17.jpg",
+      "images/ireland18.jpg",
+      "images/ireland19.jpg"
+    ]
+  }
+}

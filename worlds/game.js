@@ -1,0 +1,1839 @@
+// ============================================================
+//  WORLDS DEMO: the planet game from index.html, but every planet
+//  is built from a saved description (see worlds/users/*.json)
+//  instead of the hardcoded list. All data comes through worlds/data.js.
+// ============================================================
+import { listUsers, getUser, getPlanet, getFriends } from "./data.js";
+
+// who you're playing as (the "Playing as" switcher) and whose planet you're on: worlds.html?as=sean&visit=maya
+const params = new URLSearchParams(location.search);
+const users = await listUsers();
+const me = await getUser(params.get("as")) || await getUser("sean") || await getUser(users[0].id);
+const friends = await getFriends(me.id);
+// the planets on screen: yours first, then your friends'
+const planets = await Promise.all([me, ...friends].map(async u => toPlanet(u, await getPlanet(u.id))));
+
+// a saved planet description -> the planet entry the game uses
+function toPlanet(user, saved) {
+  return {
+    id: user.id, owner: user.name, name: saved.name || user.name + "'s planet", subtitle: saved.subtitle || "",
+    color: saved.glow || "#ccc", theme: saved.theme, ground: saved.ground, flowers: saved.flowers,
+    trail: saved.trail, landmarks: saved.landmarks, decor: saved.decor,
+    open: !!saved.open, lakes: saved.lakes || 0,
+    photos: (saved.photos || []).map(ph => typeof ph === "string" ? { file: ph, caption: "" } : { file: ph.file, caption: ph.caption || "" })
+  };
+}
+
+// ---------- Settings (optional to tweak) ----------
+const HOVER_DELAY = 500;        // ms of hovering before a photo enlarges (500 = 0.5 sec)
+const TRANSITION_TIME = 2000;   // ms for the planets to swap places
+const TUBE_SIZE = 0.1;          // thickness of the ring's tube, compared to the main planet
+
+// ---------- Paths and photo spacing ----------
+const MAIN_PATHS = 3;           // how many main trails loop around each planet
+const PHOTO_GAP = 0.42;         // distance between photos along a trail (bigger = more spread out, fewer photos)
+const PHOTO_SIZE = 0.16;        // size of each photo, compared to the planet
+const PATH_WIDTH = 0.05;        // width of the main trails, compared to the planet
+const TRAIL_LOOSENESS = 100;    // how far the sheep / car can stray from a trail, in trail widths
+                                // (100 = go anywhere, 6 = very loose, 3 = loose, 1 = right on the trail)
+
+// How the planets and character look and move (visitors can switch character with the button bottom-left).
+const CHARACTER = "sheep";      // "sheep", "car" or "ptero" (pterodactyl): what everyone starts as
+const PLANET_SIZE = 1.85;       // size of the main planet (1.2 = 20% bigger, up to 10)
+const SPEED = 1;                // how fast the character moves (2 = twice as fast, up to 10)
+const PHOTO_PIXELS = 32;        // how many pixels wide each photo is on the planet (0 = full quality, no pixels)
+const GROUND = "grass";         // "grass" (solid 8-bit ground, themed per planet) or "clear" (see-through planet)
+const CHARACTER_SIZE = 0.85;    // size of the sheep / car / pterodactyl (2 = twice as big)
+const FLYING_ZOOM = 0.8;        // the world shrinks to this size while you fly the pterodactyl (1 = no change)
+
+// ================= You don't need to edit below =================
+// Always open at the top (the planets), even if the link has #about etc. or the browser remembers a scroll spot
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+window.scrollTo({ top: 0, behavior: "instant" });
+window.addEventListener("load", () => window.scrollTo({ top: 0, behavior: "instant" }));
+
+document.documentElement.style.setProperty("--hover-delay", HOVER_DELAY / 1000 + "s");
+
+// ---------- small vector / matrix helpers ----------
+const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const cross = (a, b) => [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0]/l, a[1]/l, a[2]/l]; };
+const mulMV = (m, v) => [dot(m[0], v), dot(m[1], v), dot(m[2], v)];
+const mulMM = (a, b) => a.map(r => [0, 1, 2].map(j => r[0]*b[0][j] + r[1]*b[1][j] + r[2]*b[2][j]));
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const ease = x => x < 0.5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2;   // smooth start and stop
+const lerp = (a, b, t) => a + (b - a) * t;
+function axisAngle([x, y, z], t) {
+  const c = Math.cos(t), s = Math.sin(t), C = 1 - c;
+  return [
+    [x*x*C + c,   x*y*C - z*s, x*z*C + y*s],
+    [y*x*C + z*s, y*y*C + c,   y*z*C - x*s],
+    [z*x*C - y*s, z*y*C + x*s, z*z*C + c]
+  ];
+}
+function orthonormalize(m) {
+  const a = norm(m[0]);
+  const d = dot(a, m[1]);
+  const b = norm([m[1][0] - a[0]*d, m[1][1] - a[1]*d, m[1][2] - a[2]*d]);
+  return [a, b, cross(a, b)];
+}
+
+// ---------- build the planets ----------
+// Every photo of every planet lives in one shared 3D space, so they can fly past each other.
+const stage = document.getElementById("stage");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let radius = 250;          // main planet radius in pixels
+let baseRadius = 250;      // main planet radius before the size setting is applied
+let zoom = 1;              // shrinks smoothly to FLYING_ZOOM while flying the pterodactyl
+let slots = [];            // slot 0 = the main spot, the rest = small planet spots
+let focused = 0;           // which planet is in the main spot
+let transition = null;
+let persp = 2200;          // the 3D perspective depth used by the page
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+function seeded(seed) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const angleBetween = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
+
+// ---------- pixelated photos ----------
+// Each photo is shrunk once to a tiny copy (cached per photo and size), then every tile that
+// shows that photo draws the tiny copy, blown up with hard square pixels. Enlarged photos and
+// the galleries still use your original full-quality files.
+const PIXEL_STEPS = [8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 0];   // 0 = full quality
+const pixelTiles = [];
+const sources = new Map(), tinyCache = new Map();
+function sourceFor(file) {
+  if (!sources.has(file)) {
+    const img = new Image();
+    const ready = new Promise(res => { img.onload = res; img.onerror = res; });
+    img.src = file;
+    sources.set(file, { img, ready });
+  }
+  return sources.get(file);
+}
+function tinyCopy(file, w) {
+  const key = file + "@" + w;
+  if (tinyCache.has(key)) return tinyCache.get(key);
+  const src = sources.get(file).img;
+  if (!src.naturalWidth) return null;
+  const h = Math.max(1, Math.round(w * 2 / 3));          // photos on the planet are 3:2
+  // crop the middle of the photo to 3:2, the same way the full photo is cropped
+  const ratio = src.naturalWidth / src.naturalHeight;
+  let sw = src.naturalWidth, sh = src.naturalHeight, sx = 0, sy = 0;
+  if (ratio > 1.5) { sw = sh * 1.5; sx = (src.naturalWidth - sw) / 2; }
+  else { sh = sw / 1.5; sy = (src.naturalHeight - sh) / 2; }
+  // shrink in a few halving steps so the colours average out nicely instead of sparkling
+  let cur = src, cw = sw, ch = sh, cx = sx, cy = sy;
+  while (cw / 2 > w * 2) {
+    const c = document.createElement("canvas");
+    c.width = Math.round(cw / 2); c.height = Math.round(ch / 2);
+    const g = c.getContext("2d");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(cur, cx, cy, cw, ch, 0, 0, c.width, c.height);
+    cur = c; cw = c.width; ch = c.height; cx = 0; cy = 0;
+  }
+  const out = document.createElement("canvas");
+  out.width = w; out.height = h;
+  const g = out.getContext("2d");
+  g.imageSmoothingQuality = "high";
+  g.drawImage(cur, cx, cy, cw, ch, 0, 0, w, h);
+  tinyCache.set(key, out);
+  return out;
+}
+function pixelateTile(tile) {
+  const w = settings.pixels;
+  const tiny = w ? tinyCopy(tile.photo.file, w) : null;
+  if (!tiny) { tile.el.classList.remove("pixel"); return; }
+  if (tile.pix.width !== tiny.width || tile.pix.height !== tiny.height) {
+    tile.pix.width = tiny.width; tile.pix.height = tiny.height;
+  }
+  const g = tile.pix.getContext("2d");
+  g.clearRect(0, 0, tiny.width, tiny.height);
+  g.drawImage(tiny, 0, 0);
+  tile.el.classList.add("pixel");
+}
+function pixelateAll() { pixelTiles.forEach(pixelateTile); }
+
+// ---------- loading photos: the planet you're on first, then the others quietly in the background ----------
+const planetLoads = new Map();
+function loadPlanet(world) {
+  if (planetLoads.has(world)) return planetLoads.get(world);
+  const files = [...new Set(world.data.photos.map(p => p.file))];
+  const done = Promise.all(files.map(f => sourceFor(f).ready));
+  for (const t of world.tiles) {
+    if (!t.photo) continue;
+    sourceFor(t.photo.file).ready.then(() => {
+      if (!t.img.getAttribute("src")) t.img.src = t.photo.file;   // already downloaded, so this is instant
+      pixelateTile(t);
+    });
+  }
+  planetLoads.set(world, done);
+  return done;
+}
+// Worlds demo: only the planet you're on downloads its photos. A friend's photos load when you travel there.
+function loadAllPlanets() {
+  return loadPlanet(worlds[focused]);
+}
+
+// ---------- trails and photos ----------
+// A few winding main trails loop around the planet. Photos sit beside the trails, alternating
+// left and right, and each one is joined to its trail by a short side path.
+function buildLayout(world, minPhotos) {
+  const rand = seeded(777 + world.seed * 131);
+  const twist = mulMM(axisAngle(norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), rand() * 6.28),
+                      axisAngle([0, 1, 0], rand() * 6.28));
+  const tilts = [[0, 1, 0], [1, 0.2, 0.35], [-0.3, 0.4, 1], [0.8, -0.7, -0.5], [0.2, 0.9, -0.8]];
+  const mains = [];
+  for (let k = 0; k < Math.max(1, Math.min(MAIN_PATHS, tilts.length)); k++) {
+    const n = norm(mulMV(twist, norm(tilts[k])));
+    const a = norm(cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]));
+    const b = cross(n, a);
+    const f1 = 2 + Math.floor(rand() * 3), p1 = rand() * 6.28, a1 = 0.1 + rand() * 0.08;
+    const f2 = f1 + 3, p2 = rand() * 6.28, a2 = 0.04;
+    const pts = [], N = 260;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N * Math.PI * 2;
+      const w = a1 * Math.sin(f1 * u + p1) + a2 * Math.sin(f2 * u + p2);   // gentle meander
+      pts.push(norm([
+        a[0] * Math.cos(u) + b[0] * Math.sin(u) + n[0] * w,
+        a[1] * Math.cos(u) + b[1] * Math.sin(u) + n[1] * w,
+        a[2] * Math.cos(u) + b[2] * Math.sin(u) + n[2] * w
+      ]));
+    }
+    mains.push(pts);
+  }
+  const allTrail = mains.flat();
+  const offset = PHOTO_SIZE * 0.75 + PATH_WIDTH * 0.6 + 0.02;   // far enough that photos don't cover the trail
+  const minGap = PHOTO_SIZE * 1.85;                              // photos never overlap each other
+
+  let gap = PHOTO_GAP, photos, spurs;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    photos = []; spurs = [];
+    mains.forEach((pts, k) => {
+      let travelled = gap * (0.3 + 0.5 * rand()), side = k % 2 ? 1 : -1;
+      for (let i = 1; i < pts.length - 1; i++) {
+        travelled += angleBetween(pts[i - 1], pts[i]);
+        if (travelled < gap) continue;
+        const p = pts[i];
+        const tan = norm([pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1], pts[i + 1][2] - pts[i - 1][2]]);
+        const out = cross(p, tan);
+        side = -side;
+        const q = norm([p[0] + out[0] * offset * side, p[1] + out[1] * offset * side, p[2] + out[2] * offset * side]);
+        if (photos.some(o => angleBetween(o, q) < minGap)) continue;
+        if (allTrail.some(o => angleBetween(o, q) < offset * 0.8)) continue;
+        travelled = 0;
+        photos.push(q);
+        // short side path from the trail to the photo, with a slight bend
+        const spur = [], bend = (rand() - 0.5) * offset * 0.5;
+        for (let s = 0; s <= 6; s++) {
+          const t = s / 6, b2 = Math.sin(Math.PI * t) * bend;
+          spur.push(norm([
+            lerp(p[0], q[0], t) + tan[0] * b2,
+            lerp(p[1], q[1], t) + tan[1] * b2,
+            lerp(p[2], q[2], t) + tan[2] * b2
+          ]));
+        }
+        spurs.push(spur);
+      }
+    });
+    if (photos.length >= minPhotos || gap < 0.2) break;
+    gap *= 0.85;                       // lots of photos: pack them a bit closer
+  }
+  world.paths = [
+    ...spurs.map(pts => ({ pts, w: 0.6 })),
+    ...mains.map(pts => ({ pts, w: 1 }))
+  ];
+  world.spurs = spurs;
+  // every trail point in one list, plus extra points between them, for the "stay on the trail" check
+  const flat = [];
+  for (const path of world.paths) {
+    for (let i = 0; i < path.pts.length; i++) {
+      const a = path.pts[i];
+      flat.push(a[0], a[1], a[2]);
+      const b = path.pts[i + 1];
+      if (b) { const m = norm([a[0] + b[0], a[1] + b[1], a[2] + b[2]]); flat.push(m[0], m[1], m[2]); }
+    }
+  }
+  world.trailPts = new Float32Array(flat);
+  world.startPoint = mains[0][0];
+  return photos;
+}
+
+// ================= planet themes =================
+// Each planet in the list at the top picks a theme with  theme: "..."  (meadow, ireland, usa, forest, night).
+// A theme sets the ground colours, the trail style and the little 8-bit decorations.
+const rgbOf = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const pal = list => list.map(rgbOf);
+const GRASS = [[38, 92, 36], [52, 122, 44], [74, 156, 60], [104, 188, 80], [146, 214, 106]];   // dark to light
+const FLOWERS = [[250, 248, 236], [255, 214, 72], [240, 120, 150]];
+
+// trail styles: each layer is [width, colour, dashed?], drawn widest first
+const TRAIL_STYLES = {
+  dirt:   { layers: [[1.5, "#5e4229"], [1.0, "#94714a"], [0.35, "#ba9562"]], pebbles: true },
+  forest: { layers: [[1.5, "#3a2817"], [1.0, "#6a4b2d"], [0.35, "#86643f"]], pebbles: true },
+  stone:  { layers: [[1.9, "#9a978c"], [1.3, "#5e4229"], [0.95, "#94714a"], [0.3, "#ba9562"]], pebbles: true },  // dry-stone walls along the edges
+  road:   { layers: [[1.55, "#2c2c30"], [1.2, "#55555b"], [0.17, "#f2c84b", true]], pebbles: false },             // asphalt, dashed yellow centre line
+  neon:   { layers: [[2.0, "#3a1a5c"], [1.05, "#ff3fa4"], [0.35, "#ffe6f6"]], pebbles: false }
+};
+for (const k in TRAIL_STYLES) TRAIL_STYLES[k].palette = TRAIL_STYLES[k].layers.map(l => rgbOf(l[1]));
+
+// little 8-bit decorations, drawn from pixel maps ("." = see-through)
+const DECOR = {
+  castle: { big: true, rows: [
+    "......FF.....",
+    "......F......",
+    "......P......",
+    "S.S.S.P.S.S.S",
+    "SSSSS.P.SSSSS",
+    "SsWsSSSSSsWsS",
+    "SSSSSsSsSSSSS",
+    "SSSSSDDDSSSSS",
+    "SsSSSDDDSSSsS",
+    "SSSSSDDDSSSSS"],
+    colors: { S: "#a5a196", s: "#7f7b72", W: "#2b2420", D: "#5a3b22", F: "#d23a2f", P: "#4a4a4a" } },
+  stonehenge: { big: true, rows: [
+    "SSSSS...SSSSS...SSSSS",
+    "Ss.sS...Ss.sS...Ss.sS",
+    "Ss.sS.s.Ss.sS.s.Ss.sS",
+    "Ss.sS.S.Ss.sS.S.Ss.sS",
+    "Ss.sS.S.Ss.sS.S.Ss.sS"],
+    colors: { S: "#b5b2a6", s: "#8a877d" } },
+  sheep: { rows: [".WWWW.", "WWWWWK", "WWWWWK", ".K..K."], colors: { W: "#f4f1ea", K: "#2e2a27" } },
+  bush: { rows: [".BBB.", "BBbBB", ".BBB."], colors: { B: "#2a6a27", b: "#1f521e" } },
+  rock: { rows: [".RRR.", "RRrRR", "RrRRR"], colors: { R: "#9b978c", r: "#76726a" } },
+  pine: { rows: ["..G..", ".GGG.", "..G..", ".GGG.", "GGgGG", ".GGG.", "GgGGg", "..T.."],
+    colors: { G: "#1e4f2c", g: "#2f6e3f", T: "#5a3a22" } },
+  tree: { rows: [".LLLL..", "LLlLLL.", "LLLLlLL", ".LlLLL.", "..LLL..", "...T...", "..TTT.."],
+    colors: { L: "#4f7f2c", l: "#6b9a3a", T: "#5a3a22" } },
+  cactus: { rows: ["..C..", "C.C..", "C.C.C", "CCC.C", "..CCC", "..C..", "..C.."], colors: { C: "#3f7f3a" } },
+  butte: { big: true, rows: [
+    "...RRRRRRRR....",
+    "...RrRRRRrR....",
+    "..RRRRRRRRRR...",
+    "..RRrRRRRRRRR..",
+    ".RRRRRRrRRRRRR.",
+    "RRrRRRRRRRRrRRR",
+    "RRRRRRRRRRRRRRR"],
+    colors: { R: "#b4532c", r: "#8e3c1f" } },
+  sage: { rows: [".Ss.", "SSsS"], colors: { S: "#7f8a62", s: "#a8b38a" } },
+  drift: { rows: ["DDDDDDD.", ".DdDDDdD"], colors: { D: "#cdb79a", d: "#a8927a" } },
+  mountain: { big: true, rows: [
+    ".......W.......",
+    "......WWW......",
+    ".....WWMWW.....",
+    "....MMMMMMM....",
+    "...MMmMMMMMM...",
+    "..MMMMMMmMMMM..",
+    ".MMmMMMMMMMMMM.",
+    "MMMMMMMMMMMmMMM"],
+    colors: { W: "#f4f4f4", M: "#6b6f86", m: "#555970" } },
+  graffiti: { rows: ["ABCDEFAB", "CDEFABCD", "EFABCDEF"],
+    colors: { A: "#e8457f", B: "#3fd0e8", C: "#f2d14b", D: "#7d4fe0", E: "#5fd06a", F: "#f07c3a" } },
+  stage: { big: true, rows: [
+    "K...............K",
+    "KTTTTTTTTTTTTTTTK",
+    "K.Y.P.C.Y.P.C.Y.K",
+    "K...............K",
+    "KNN...........NNK",
+    "KNN...........NNK",
+    "SSSSSSSSSSSSSSSSS",
+    "SsSsSsSsSsSsSsSsS"],
+    colors: { K: "#9a9ab8", T: "#9a9ab8", Y: "#fff27a", P: "#ff5fd2", C: "#5ff2ff", N: "#4a4a5e", S: "#7b55a0", s: "#5d3f7d" } },
+  lamp: { rows: [".Y.", "YYY", ".Y.", ".K.", ".K.", ".K.", ".K.", "KKK"], colors: { Y: "#ff5fd2", K: "#9a9ab8" } }
+};
+const DECOR_UNIT = 0.012;          // how big one decoration pixel is, compared to the planet
+
+const THEMES = {
+  meadow: { ground: GRASS, flowers: FLOWERS, trail: "dirt" },
+  ireland: {
+    ground: pal(["#1d5422", "#28712c", "#36903a", "#4fad48", "#7ccb66"]), flowers: FLOWERS, trail: "stone",
+    landmarks: ["castle", "stonehenge"],
+    decor: [["sheep", 8], ["bush", 12], ["rock", 8]]
+  },
+  forest: {
+    ground: pal(["#143a1a", "#1c4f23", "#25662d", "#307d38", "#43964a"]), flowers: pal(["#e8e0c8", "#d23a2f"]), trail: "forest",
+    decor: [["pine", 34], ["tree", 18, { L: "#2d6b2f", l: "#3f8a3c" }], ["rock", 8], ["bush", 10]]
+  },
+  night: {
+    ground: pal(["#0d0e2a", "#14163a", "#1c1f4d", "#262a63", "#323779"]),
+    flowers: pal(["#ff5fd2", "#5ff2ff", "#fff27a"]), flowerRate: 0.02, trail: "neon",
+    landmarks: ["stage"],
+    decor: [["lamp", 12], ["graffiti", 3]]
+  },
+  // the USA is made of several biomes, each based on the photos
+  usa: {
+    trail: "road",
+    biomes: [
+      { name: "red-rock canyon", ground: pal(["#7a331b", "#9c4424", "#b75a30", "#cf7444", "#e09363"]), flowers: [],
+        decor: [["butte", 4], ["rock", 7, { R: "#a5532e", r: "#7e3a1f" }], ["tree", 6, { L: "#8fc04a", l: "#b5dc6a" }]] },
+      { name: "sagebrush desert", ground: pal(["#5d5a3c", "#76704a", "#8f8659", "#a89c69", "#c1b27c"]), flowers: pal(["#d9c27a"]),
+        decor: [["sage", 18], ["cactus", 6]] },
+      { name: "beach", ground: pal(["#c2ad83", "#d2bd93", "#dfcca6", "#ebdcb8", "#f5ead0"]), flowers: [], water: 0.34,
+        decor: [["drift", 5], ["rock", 3]] },
+      { name: "mountain lake", ground: pal(["#2a5636", "#376a42", "#457f4e", "#56955c", "#6caa6c"]), flowers: FLOWERS, water: 0.22,
+        decor: [["pine", 18], ["mountain", 2]] },
+      { name: "oak hills", ground: pal(["#8a6a2c", "#a5803a", "#bf9848", "#d4ae5c", "#e3c374"]), flowers: [],
+        decor: [["tree", 9], ["bush", 6, { B: "#6f7a3a", b: "#5a6430" }], ["graffiti", 1]] }
+    ]
+  }
+};
+
+// ---------- biomes: big regions of a planet, each with its own ground ----------
+function setupBiomes(world) {
+  const th = world.theme;
+  if (!th.biomes) return;
+  const rand = seeded(2024 + world.seed * 53);
+  const twist = mulMM(axisAngle(norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), rand() * 6.28), axisAngle([0, 1, 0], rand() * 6.28));
+  const dirs = [[0, 0.15, 1], [1, 0.05, -0.25], [-0.95, 0.3, -0.3], [0.1, -1, 0.05], [-0.1, 1, -0.3]];
+  world.biomes = th.biomes.map((b, i) => ({
+    def: b, c: norm(mulMV(twist, norm(dirs[i % dirs.length]))),
+    nd: norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), nf: 5 + rand() * 5, np: rand() * 6.28
+  }));
+  // beaches get an ocean and the mountain biome a lake, in the middle of their region
+  world.lakes = world.lakes || [];
+  world.biomes.forEach(B => {
+    if (!B.def.water) return;
+    const c = B.c, t1 = norm(cross(c, Math.abs(c[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), t2 = cross(c, t1);
+    world.lakes.push({ c, t1, t2, r: B.def.water,
+      waves: [[2 + Math.floor(rand() * 2), rand() * 6.28, 0.14], [5 + Math.floor(rand() * 3), rand() * 6.28, 0.06]] });
+  });
+}
+// which biome a spot is in (with wiggly borders); also returns the runner-up and how close the call was
+function biomeAt(world, p) {
+  let b1 = 0, b2 = 0, v1 = -9, v2 = -9;
+  const B = world.biomes;
+  for (let i = 0; i < B.length; i++) {
+    const b = B[i];
+    const v = b.c[0] * p[0] + b.c[1] * p[1] + b.c[2] * p[2] +
+              0.08 * Math.sin((b.nd[0] * p[0] + b.nd[1] * p[1] + b.nd[2] * p[2]) * b.nf + b.np);
+    if (v > v1) { v2 = v1; b2 = b1; v1 = v; b1 = i; } else if (v > v2) { v2 = v; b2 = i; }
+  }
+  return [b1, b2, v1 - v2];
+}
+
+// ---------- placing decorations in the open spaces ----------
+function buildDecor(world) {
+  const th = world.theme, rand = seeded(31337 + world.seed * 97), out = [];
+  const photoPts = world.tiles.map(t => t.p);
+  const fits = (q, room) => {
+    if (world.trailPts.length && trailCloseness(world, q) > Math.cos(PATH_WIDTH * 1.2 + room)) return false;
+    if (photoPts.some(p => dot(p, q) > Math.cos(PHOTO_SIZE * 0.95 + room))) return false;
+    if (lakeDepth(world, q) > -0.1) return false;
+    if (out.some(o => dot(o.p, q) > Math.cos(o.room + room))) return false;
+    return true;
+  };
+  const put = (name, colors, biome, tries) => {
+    const sp = DECOR[name];
+    const size = sp.rows[0].length * DECOR_UNIT * (sp.big ? 1.25 : 1), room = size * 0.55;
+    for (let t = 0; t < tries; t++) {
+      const q = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
+      if (biome != null && biomeAt(world, q)[0] !== biome) continue;
+      if (!fits(q, room)) continue;
+      const all = Object.assign({}, sp.colors, colors || {}), rgb = {};
+      for (const k in all) rgb[k] = rgbOf(all[k]);
+      out.push({ p: q, sprite: sp, rgb, size, room });
+      return;
+    }
+  };
+  (th.landmarks || []).forEach(n => put(n, null, null, 4000));
+  (th.decor || []).forEach(([n, count, colors]) => { for (let i = 0; i < count; i++) put(n, colors, null, 300); });
+  (th.biomes || []).forEach((b, bi) => (b.decor || []).forEach(([n, count, colors]) => {
+    for (let i = 0; i < count; i++) put(n, colors, bi, DECOR[n].big ? 4000 : 500);   // big ones need more tries to find room
+  }));
+  world.decor = out;
+}
+
+// ---------- a planet's look, from its saved description ----------
+// The description picks a theme to start from, and can then swap out any part of it:
+// ground (5 colours, dark to light), flowers, trail style, landmarks and decorations.
+const isHex = c => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+const okDecor = list => (Array.isArray(list) ? list : []).filter(d => Array.isArray(d) && DECOR[d[0]])
+  .map(([name, count, colors]) => [name, Math.max(0, Math.min(60, Math.round(count) || 0)), colors]);
+function themeFromData(data) {
+  const th = Object.assign({}, THEMES[data.theme] || THEMES.meadow);
+  if (Array.isArray(data.ground) && data.ground.length === 5 && data.ground.every(isHex)) {
+    th.ground = pal(data.ground);
+    delete th.biomes;                    // your own ground colours cover the whole planet
+  }
+  if (Array.isArray(data.flowers) && data.flowers.every(isHex)) th.flowers = pal(data.flowers);
+  if (TRAIL_STYLES[data.trail]) th.trail = data.trail;
+  if (Array.isArray(data.landmarks)) th.landmarks = data.landmarks.filter(n => DECOR[n]);
+  if (Array.isArray(data.decor)) th.decor = okDecor(data.decor);
+  return th;
+}
+// each planet gets its own fixed random layout from its owner's id, so it looks the same whoever visits
+function seedOf(id) {
+  let h = 7;
+  for (const ch of String(id)) h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
+  return (h >>> 0) % 10007;
+}
+
+const worlds = planets.map((data, idx) => {
+  const glow = document.createElement("div");
+  glow.className = "glow";
+  glow.style.setProperty("--glow", data.color || "#ccc");
+  stage.appendChild(glow);
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "paths";
+  stage.appendChild(canvas);
+
+  const label = document.createElement("button");
+  label.className = "planet-label";
+  label.textContent = idx === 0 ? "Home" : data.owner;
+  label.addEventListener("click", () => goToPlanet(idx));
+  stage.appendChild(label);
+
+  const world = {
+    idx, data, glow, label, seed: seedOf(data.id), canvas, ctx: canvas.getContext("2d", { willReadFrequently: true }), crect: null,
+    tiles: [], paths: [], slot: idx,
+    rot: mulMM(axisAngle([0, 1, 0], idx * 0.7), axisAngle([1, 0, 0], -0.3)),
+    pathAlpha: 1, pathsDirty: true,
+    dirty: true
+  };
+  world.theme = themeFromData(data);
+  if (data.open) buildOpenWorld(world);
+  else buildTiles(world, buildLayout(world, data.photos.length));
+  setupBiomes(world);
+  buildDecor(world);
+  // start each planet with a trail (or dry land) under the character
+  const c = mulMV(world.rot, world.startPoint);
+  const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
+  if (l > 1e-6) world.rot = mulMM(axisAngle([ax[0] / l, ax[1] / l, ax[2] / l], Math.atan2(l, c[2])), world.rot);
+  return world;
+});
+
+// ---------- open world: grass and lakes, no trails ----------
+function buildOpenWorld(world) {
+  const rand = seeded(555 + world.seed * 17);
+  world.paths = []; world.spurs = [];
+  world.trailPts = new Float32Array(0);
+  world.lakes = [];
+  for (let i = 0; i < (world.data.lakes || 0); i++) {
+    const c = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
+    const t1 = norm(cross(c, Math.abs(c[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), t2 = cross(c, t1);
+    world.lakes.push({ c, t1, t2, r: 0.2 + rand() * 0.22,
+      waves: [[2 + Math.floor(rand() * 2), rand() * 6.28, 0.16], [5 + Math.floor(rand() * 3), rand() * 6.28, 0.07]] });
+  }
+  // start on dry land, but near a lake shore so you can see the water
+  let start = [0, 0, 1];
+  for (let i = 0; i < 400; i++) {
+    const q = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
+    const lk = lakeDepth(world, q);
+    if (lk < -0.35 && lk > -0.7) { start = q; break; }
+  }
+  world.startPoint = start;
+}
+// how far inside a lake a point is: above 0 = water, around 0 = the shore, below 0 = dry land
+function lakeDepth(world, p) {
+  let best = -1;
+  if (!world.lakes) return best;
+  for (const L of world.lakes) {
+    const d = L.c[0] * p[0] + L.c[1] * p[1] + L.c[2] * p[2];
+    if (d < 0.5) continue;
+    const ang = Math.atan2(L.t2[0] * p[0] + L.t2[1] * p[1] + L.t2[2] * p[2], L.t1[0] * p[0] + L.t1[1] * p[1] + L.t1[2] * p[2]);
+    let r = L.r;
+    for (const [f, ph, a] of L.waves) r *= 1 + a * Math.sin(f * ang + ph);   // wobbly shoreline
+    const depth = (r - Math.acos(Math.min(1, d))) / r;
+    if (depth > best) best = depth;
+  }
+  return best;
+}
+
+function buildTiles(world, pts) {
+  const photos = world.data.photos;
+  pts.forEach((p, i) => {
+    const el = document.createElement("div");
+    el.className = "tile";
+    const tile = { el, img: null, p, photo: null, world, lag: 0 };
+    if (photos.length) {
+      const photo = photos[i % photos.length];
+      const img = new Image();               // its photo is filled in when this planet's turn to load comes
+      img.alt = photo.caption || world.data.name;
+      img.draggable = false;
+      el.appendChild(img);
+      const pix = document.createElement("canvas");
+      el.appendChild(pix);
+      tile.img = img;
+      tile.pix = pix;
+      tile.entry = world.spurs && world.spurs[i] ? world.spurs[i][2] : null;   // where you come back out
+      tile.photo = photo;
+      attachHover(tile);
+      pixelTiles.push(tile);
+    } else {
+      el.classList.add("empty");
+    }
+    stage.appendChild(el);
+    world.tiles.push(tile);
+  });
+}
+
+// put one photo at a point in 3D (pixels from the middle of the screen)
+function place(t, x, y, z, s, facing, boost = 0, alpha = 1) {
+  t.el.style.transform = `translate3d(${x}px,${y}px,${z}px) scale(${s})`;
+  t.el.style.zIndex = Math.round(z + 20000 + boost);
+  // photos facing you are solid; only ones turning away toward the edge fade out
+  t.el.style.opacity = alpha * (facing > 0 ? Math.min(1, 0.55 + facing * 1.6) : 0.1 + 0.2 * (1 + facing));
+  const isBack = facing < 0.1;
+  if (isBack !== t.el.classList.contains("back")) {
+    t.el.classList.toggle("back", isBack);
+    if (isBack && hoverTile === t) cancelHover();
+  }
+}
+function placeGlow(world, x, y, z, s, alpha = 1) {
+  world.glow.style.transform = `translate3d(${x}px,${y}px,${z - radius * s}px) scale(${s})`;
+  world.glow.style.zIndex = Math.round(z - radius * s + 20000);
+  world.glow.style.opacity = 0.35 * alpha;
+}
+
+// a planet sitting still in its spot
+function setOffstage(world, off) {
+  if (world.offstage === off) return;
+  world.offstage = off;
+  world.tiles.forEach(t => t.el.classList.toggle("offstage", off));
+}
+function drawResting(world) {
+  const { x, y, s } = slots[world.slot];
+  const boost = world.slot === 0 ? 0 : 30000;     // small planets always sit on top of a huge main planet
+  // the small planets on the side are just previews: the planet and its trails, no photos
+  setOffstage(world, world.slot !== 0);
+  if (world.slot === 0) {
+    for (const t of world.tiles) {
+      const c = mulMV(world.rot, t.p);
+      place(t, x + c[0]*radius*s, y + c[1]*radius*s, c[2]*radius*s, s, c[2], boost);
+    }
+  }
+  world.canvas.style.zIndex = 20000 + boost;
+  placeGlow(world, x, y, 0, s);
+  world.dirty = false;
+  world.pathsDirty = true;
+}
+
+// ---------- drawing the trails ----------
+// Each planet paints its trails on its own sharp canvas. The canvas sits between the far side
+// and the near side of the planet, so the photos always sit on top of the trails.
+// size of one trail "pixel" on screen, matched to the pixels of the sheep and car sprites
+let trailPix = 4;
+function sizePathCanvas(world) {
+  const w = stage.clientWidth, h = stage.clientHeight, sl = slots[world.slot];
+  trailPix = Math.max(2, Math.round(baseRadius * 0.3 * Math.min(1, settings.size) / 18));
+  const R = radius * sl.s, k = persp / (persp - R);
+  const half = R * k * 1.08;
+  const cx = w / 2 + sl.x, cy = h / 2 + sl.y;
+  // line the canvas up with the pixel grid so every trail pixel is a clean square
+  const snap = v => Math.floor(v / trailPix) * trailPix;
+  const left = Math.max(0, snap(cx - half)), top = Math.max(0, snap(cy - half));
+  const right = Math.min(w, cx + half), bottom = Math.min(h, cy + half);
+  const pw = Math.max(1, Math.ceil((right - left) / trailPix)), ph = Math.max(1, Math.ceil((bottom - top) / trailPix));
+  world.crect = { left, top, w: pw * trailPix, h: ph * trailPix };
+  world.canvas.width = pw;
+  world.canvas.height = ph;
+  Object.assign(world.canvas.style, { left: left + "px", top: top + "px", width: pw * trailPix + "px", height: ph * trailPix + "px" });
+  world.pathsDirty = true;
+}
+
+// a tiny 8-bit palette for the dirt
+function drawWorldPaths(world) {
+  world.pathsDirty = false;
+  const ctx = world.ctx, r = world.crect;
+  if (!r) return;
+  const W = world.canvas.width, H = world.canvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  world.canvas.style.opacity = world.pathAlpha;
+  if (world.pathAlpha <= 0) return;
+  ctx.setTransform(1 / trailPix, 0, 0, 1 / trailPix, 0, 0);     // draw in screen pixels onto the small canvas
+  const sl = slots[world.slot], R = radius * sl.s, m = world.rot;
+  const ox = stage.clientWidth / 2 + sl.x - r.left, oy = stage.clientHeight / 2 + sl.y - r.top;
+  const base = PATH_WIDTH * R;
+  const style = TRAIL_STYLES[world.theme.trail] || TRAIL_STYLES.dirt;
+
+  // work out where every trail point lands on screen
+  for (const path of world.paths) {
+    const n = path.pts.length;
+    if (!path.proj) path.proj = new Float32Array(n * 4);
+    const P = path.proj;
+    for (let i = 0; i < n; i++) {
+      const p = path.pts[i];
+      const z = m[2][0]*p[0] + m[2][1]*p[1] + m[2][2]*p[2];
+      const k = persp / (persp - z * R);
+      P[i*4]   = ox + (m[0][0]*p[0] + m[0][1]*p[1] + m[0][2]*p[2]) * R * k;
+      P[i*4+1] = oy + (m[1][0]*p[0] + m[1][1]*p[1] + m[1][2]*p[2]) * R * k;
+      P[i*4+2] = z;
+      P[i*4+3] = k;
+    }
+  }
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // segments are grouped by (pixel-rounded) width so each group is drawn in one go
+  for (const [lw, color, dashed] of style.layers) {
+    ctx.strokeStyle = color;
+    const groups = new Map();
+    for (const path of world.paths) {
+      if (dashed && path.w < 1) continue;               // side roads get no centre line
+      const P = path.proj, n = path.pts.length;
+      for (let i = 0; i < n - 1; i++) {
+        if (dashed && (i >> 1) % 2) continue;            // dashes: two segments on, two off
+        const z1 = P[i*4+2], z2 = P[i*4+6];
+        if (z1 < 0.02 || z2 < 0.02) continue;          // only the side facing you
+        const z = (z1 + z2) / 2, k = (P[i*4+3] + P[i*4+7]) / 2;
+        const width = Math.max(trailPix * 0.9, base * path.w * lw * k * (0.3 + 0.7 * z));
+        const g = Math.round(width / (trailPix * 0.5));
+        let list = groups.get(g);
+        if (!list) groups.set(g, list = []);
+        list.push(P[i*4], P[i*4+1], P[i*4+4], P[i*4+5]);
+      }
+    }
+    for (const [g, list] of groups) {
+      ctx.lineWidth = g * trailPix * 0.5;
+      ctx.beginPath();
+      for (let q = 0; q < list.length; q += 4) {
+        ctx.moveTo(list[q], list[q + 1]);
+        ctx.lineTo(list[q + 2], list[q + 3]);
+      }
+      ctx.stroke();
+    }
+  }
+  // little dark pebbles that stay put on the ground as it rolls
+  if (style.pebbles) {
+    ctx.fillStyle = style.layers[style.layers.length > 3 ? 1 : 0][1];
+    for (const path of world.paths) {
+      if (path.w < 1) continue;
+      const P = path.proj, n = path.pts.length;
+      for (let i = 3; i < n - 1; i += 7) {
+        if (P[i*4+2] < 0.25) continue;
+        const dx = P[i*4+4] - P[i*4-4], dy = P[i*4+5] - P[i*4-3], l = Math.hypot(dx, dy) || 1;
+        const off = base * 0.3 * P[i*4+3] * ((i % 2) ? 1 : -1);
+        ctx.fillRect(P[i*4] - dy / l * off - trailPix / 2, P[i*4+1] + dx / l * off - trailPix / 2, trailPix, trailPix);
+      }
+    }
+  }
+
+  // snap every pixel to the trail's palette with hard edges: no blur, no soft anti-aliasing
+  const img = ctx.getImageData(0, 0, W, H), d = img.data, TP = style.palette;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 110) { d[i + 3] = 0; continue; }
+    const a = d[i + 3] / 255;
+    const r0 = d[i] / a, g0 = d[i + 1] / a, b0 = d[i + 2] / a;
+    let best = 0, bestD = 1e9;
+    for (let c = 0; c < TP.length; c++) {
+      const C = TP[c];
+      const dd = (r0 - C[0]) ** 2 + (g0 - C[1]) ** 2 + (b0 - C[2]) ** 2;
+      if (dd < bestD) { bestD = dd; best = c; }
+    }
+    const C = TP[best];
+    d[i] = C[0]; d[i + 1] = C[1]; d[i + 2] = C[2]; d[i + 3] = 255;
+  }
+  if (settings.ground === "grass" || world.data.open) {
+    paintGround(world, d, W, H);
+    drawDecor(world, d, W, H);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+
+// ---------- the solid 8-bit ground ----------
+// Every pixel inside the planet's outline is traced back to a spot on the ground, so the
+// ground colours, tufts, flowers and biomes stay put and roll with the planet as you move.
+const WATER = [[30, 70, 140], [44, 104, 184], [66, 140, 214], [104, 178, 236], [224, 244, 255]];   // deep to light, then a glint
+const SAND = [[206, 184, 116], [226, 206, 140]];
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - 0.47);
+const LIGHT = norm([-0.45, -0.55, 0.7]);                  // sunlight from the top left
+function hash3(x, y, z) {
+  let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function paintGround(world, d, W, H) {
+  const r = world.crect, sl = slots[world.slot], R = radius * sl.s, m = world.rot;
+  const cx = stage.clientWidth / 2 + sl.x - r.left, cy = stage.clientHeight / 2 + sl.y - r.top;
+  const th = world.theme;
+  // where each pixel lands on the ball only changes when the layout changes, so remember it
+  const key = W + "x" + H + ":" + R + ":" + persp + ":" + cx + ":" + cy;
+  if (world.grassKey !== key) {
+    world.grassKey = key;
+    const view = world.grassView = new Float32Array(W * H * 4);
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const u = ((i + 0.5) * trailPix - cx) / R, v = ((j + 0.5) * trailPix - cy) / R;
+      let z = 0, x = 0, y = 0, rr = 0;
+      for (let it = 0; it < 3; it++) {                    // undo the perspective
+        const k = persp / (persp - z * R);
+        x = u / k; y = v / k; rr = x * x + y * y;
+        z = rr < 1 ? Math.sqrt(1 - rr) : 0;
+      }
+      const o = (j * W + i) * 4;
+      view[o] = x; view[o + 1] = y; view[o + 2] = z; view[o + 3] = rr;
+    }
+  }
+  const view = world.grassView;
+  const detail = 70, p = [0, 0, 0];
+  for (let j = 0; j < H; j++) {
+    for (let i = 0; i < W; i++) {
+      const o = (j * W + i) * 4;
+      if (d[o + 3]) continue;                             // a trail is already here
+      if (view[o + 3] >= 1) continue;                    // outside the planet
+      const x = view[o], y = view[o + 1], z = view[o + 2];
+      const dither = BAYER[(j & 3) * 4 + (i & 3)];
+      // point in the planet's own coordinates (so it rolls with the planet)
+      const px = p[0] = m[0][0]*x + m[1][0]*y + m[2][0]*z;
+      const py = p[1] = m[0][1]*x + m[1][1]*y + m[2][1]*z;
+      const pz = p[2] = m[0][2]*x + m[1][2]*y + m[2][2]*z;
+      // round-ball shading, darker toward the edge
+      const shade = 0.25 + 0.75 * Math.max(0, x * LIGHT[0] + y * LIGHT[1] + z * LIGHT[2]);
+      if (world.lakes) {
+        const lk = lakeDepth(world, p);
+        if (lk > -0.12) {
+          let c;
+          if (lk < 0) c = SAND[lk > -0.06 ? 1 : 0];             // sandy shore
+          else {
+            // water: deeper = darker, little glints that stay on the surface
+            const wl = shade * 2.6 - Math.min(1.2, lk * 2.2) + dither * 0.8;
+            const glint = hash3(Math.floor(px * 90), Math.floor(py * 90), Math.floor(pz * 90)) < 0.02 && lk > 0.15;
+            c = glint ? WATER[4] : WATER[Math.max(0, Math.min(3, Math.round(wl)))];
+          }
+          d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+          continue;
+        }
+      }
+      // which colours to use here: the theme's, or the biome's (dithered where two biomes meet)
+      let ground = th.ground || GRASS, flowers = th.flowers || FLOWERS, rate = th.flowerRate || 0.006;
+      if (world.biomes) {
+        const [b1, b2, gap] = biomeAt(world, p);
+        const b = world.biomes[gap < 0.04 && dither * 0.04 + 0.02 > gap ? b2 : b1].def;
+        ground = b.ground; flowers = b.flowers; rate = b.flowerRate || 0.006;
+      }
+      let level = shade * 4.2 + dither * 0.9;
+      // tufts and the odd flower, fixed to spots on the ground
+      const t = hash3(Math.floor(px * detail), Math.floor(py * detail), Math.floor(pz * detail));
+      if (flowers.length && t < rate && z > 0.3) {
+        const f = flowers[Math.floor(t / rate * 997) % flowers.length];
+        d[o] = f[0]; d[o + 1] = f[1]; d[o + 2] = f[2]; d[o + 3] = 255;
+        continue;
+      }
+      if (t < 0.07) level += 1;
+      else if (t > 0.93) level -= 1;
+      const c = ground[Math.max(0, Math.min(4, Math.round(level)))];
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+    }
+  }
+}
+
+// decorations stand upright on the ground, drawn back-to-front so near ones overlap far ones
+function drawDecor(world, d, W, H) {
+  if (!world.decor || !world.decor.length) return;
+  const r = world.crect, sl = slots[world.slot], R = radius * sl.s, m = world.rot;
+  const ox = stage.clientWidth / 2 + sl.x - r.left, oy = stage.clientHeight / 2 + sl.y - r.top;
+  const list = [];
+  for (const o of world.decor) {
+    const p = o.p;
+    const z = m[2][0]*p[0] + m[2][1]*p[1] + m[2][2]*p[2];
+    if (z < 0.18) continue;                             // too close to the edge, or round the back
+    const k = persp / (persp - z * R);
+    const gw = o.sprite.rows[0].length;
+    const want = o.size * R * k / trailPix / gw;        // how many canvas pixels per sprite pixel
+    if (want < 0.55) continue;                          // too small to read (the little side planets)
+    list.push([(oy + (m[1][0]*p[0] + m[1][1]*p[1] + m[1][2]*p[2]) * R * k) / trailPix,
+               (ox + (m[0][0]*p[0] + m[0][1]*p[1] + m[0][2]*p[2]) * R * k) / trailPix,
+               Math.max(1, Math.round(want)), o]);
+  }
+  list.sort((a, b) => a[0] - b[0]);
+  for (const [sy, sx, sc, o] of list) {
+    const rows = o.sprite.rows, gw = rows[0].length, gh = rows.length;
+    const x0 = Math.round(sx - gw * sc / 2), y0 = Math.round(sy - gh * sc);
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+      const ch = rows[j][i];
+      if (ch === ".") continue;
+      const c = o.rgb[ch];
+      for (let yy = 0; yy < sc; yy++) {
+        const Y = y0 + j * sc + yy;
+        if (Y < 0 || Y >= H) continue;
+        for (let xx = 0; xx < sc; xx++) {
+          const X = x0 + i * sc + xx;
+          if (X < 0 || X >= W) continue;
+          const q = (Y * W + X) * 4;
+          d[q] = c[0]; d[q + 1] = c[1]; d[q + 2] = c[2]; d[q + 3] = 255;
+        }
+      }
+    }
+  }
+}
+
+// ---------- swapping two planets along a shared ring ----------
+// The two spots are the ends of a circle that stands up "into" the screen.
+// The leaving planet takes the half of the circle that goes behind the screen,
+// the arriving planet takes the half that comes out toward you.
+const RING_TILT = 0.65;   // tilts the ring so you can see its round shape (0 = edge-on)
+function arcPoint(S, E, phase, side) {
+  const a = phase * Math.PI;
+  const dx = E.x - S.x, dy = E.y - S.y;
+  const len = Math.hypot(dx, dy) || 1, half = len / 2;
+  // the ring rises "into the screen" but is also tipped sideways so it reads as a loop
+  const px = -dy / len, py = dx / len;
+  const out = Math.sin(a) * half * side;
+  const sx = Math.abs(px) > Math.abs(py) ? Math.sign(px) : Math.sign(py);   // keep the leaving half on the upper/left side
+  return [
+    (S.x + E.x) / 2 - Math.cos(a) * dx / 2 + out * Math.sin(RING_TILT) * px * sx,
+    (S.y + E.y) / 2 - Math.cos(a) * dy / 2 + out * Math.sin(RING_TILT) * py * sx,
+    out * Math.cos(RING_TILT)
+  ];
+}
+
+function prepareTravel(world, S, E) {
+  // give each photo its own spot along the half ring. Photos on the side facing the
+  // destination get the spots furthest along, so the planet unrolls into a line without tangling.
+  const dx = E.x - S.x, dy = E.y - S.y, l = Math.hypot(dx, dy) || 1;
+  const order = world.tiles
+    .map(t => { const c = mulMV(world.rot, t.p); return { t, lead: (c[0] * dx + c[1] * dy) / l }; })
+    .sort((a, b) => a.lead - b.lead);
+  const n = order.length;
+  order.forEach((o, k) => { o.t.lag = n > 1 ? k / (n - 1) : 1; });   // 0 = start end, 1 = far end
+  world.leadSorted = order.map(o => o.lead);
+}
+
+// One continuous flow: every photo glides along the half ring at a steady pace, each setting off
+// a little after the one ahead of it. Halfway through, the photos are spread evenly along the
+// whole half ring, so the two planets together make a complete ring, and nothing stops.
+// where something on a travelling planet is at this moment of the trip.
+// c = its spot on the planet (as seen at the start), lag = when it sets off along the ring.
+function travelPos(c, lag, S, E, side, g, ringness, tube, out) {
+  const W = 0.5;                                     // how spread out the stream is
+  const ph = clamp01((g - (1 - lag) * W) / (1 - W));
+  const P = arcPoint(S, E, ph, side);
+  const s = lerp(S.s, E.s, ph);
+  // direction the stream is heading here, so each item can sit on the tube's round wall
+  const A = arcPoint(S, E, Math.max(0, ph - 0.01), side), B = arcPoint(S, E, Math.min(1, ph + 0.01), side);
+  const tan = norm([B[0] - A[0], B[1] - A[1], B[2] - A[2]]);
+  const along = dot(c, tan);
+  const wall = norm([c[0] - tan[0]*along, c[1] - tan[1]*along, c[2] - tan[2]*along]);
+  // blend its spot on the planet with its spot on the tube wall
+  out[0] = P[0] + lerp(c[0] * radius * s, wall[0] * tube, ringness);
+  out[1] = P[1] + lerp(c[1] * radius * s, wall[1] * tube, ringness);
+  out[2] = P[2] + lerp(c[2] * radius * s, wall[2] * tube, ringness);
+  out[3] = s;
+  out[4] = lerp(c[2], 0.35 + 0.65 * wall[2], ringness);   // how much it faces you
+  return out;
+}
+
+function drawTravel(world, S, E, side, T, photoAlpha = 1) {
+  const g = 0.5 - 0.5 * Math.cos(Math.PI * T);      // gentle start and finish, no pause in the middle
+  const ringness = Math.sqrt(Math.sin(Math.PI * g)); // 0 = sphere, 1 = tube
+  const tube = radius * TUBE_SIZE;
+  const out = [0, 0, 0, 0, 0];
+  for (const t of world.tiles) {
+    travelPos(mulMV(world.rot, t.p), t.lag, S, E, side, g, ringness, tube, out);
+    place(t, out[0], out[1], out[2], out[3], out[4], 0, photoAlpha);
+  }
+  const P = arcPoint(S, E, g, side);
+  placeGlow(world, P[0], P[1], P[2], lerp(S.s, E.s, g), 1 - ringness);
+  drawTravelPixels(world, S, E, side, g, ringness, tube);
+}
+
+// ---------- the planet's own pixels travel too ----------
+// When a switch starts, every pixel of the planet's grass / trails / lakes is picked up from its
+// canvas and sent along the same ring as the photos, then the real planet takes over at the end.
+const travelCanvas = document.createElement("canvas");
+travelCanvas.id = "travel";
+stage.appendChild(travelCanvas);
+const travelCtx = travelCanvas.getContext("2d");
+function lagFromLead(leads, lead) {
+  let lo = 0, hi = leads.length - 1;
+  if (lead <= leads[0]) return 0;
+  if (lead >= leads[hi]) return 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (leads[mid] <= lead) lo = mid; else hi = mid; }
+  const f = (lead - leads[lo]) / ((leads[hi] - leads[lo]) || 1);
+  return (lo + f) / (leads.length - 1);
+}
+function capturePixels(world, S, E) {
+  world.travelPixels = null;
+  const r = world.crect;
+  if (!r || world.pathAlpha <= 0) return;
+  const W = world.canvas.width, H = world.canvas.height;
+  const data = world.ctx.getImageData(0, 0, W, H).data;
+  let count = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i]) count++;
+  if (!count) return;
+  const stride = Math.max(1, Math.round(Math.sqrt(count / 2600)));   // keep it to a few thousand pieces
+  const sl = slots[world.slot], R = radius * sl.s;
+  const cx = stage.clientWidth / 2 + sl.x - r.left, cy = stage.clientHeight / 2 + sl.y - r.top;
+  const dx = E.x - S.x, dy = E.y - S.y, l = Math.hypot(dx, dy) || 1;
+  const groups = new Map(), all = [];
+  for (let j = 0; j < H; j += stride) for (let i = 0; i < W; i += stride) {
+    const o = (j * W + i) * 4;
+    if (!data[o + 3]) continue;
+    const u = ((i + 0.5) * trailPix - cx) / R, v = ((j + 0.5) * trailPix - cy) / R;
+    let z = 0, x = 0, y = 0, rr = 0;
+    for (let it = 0; it < 3; it++) {                    // undo the perspective
+      const k = persp / (persp - z * R);
+      x = u / k; y = v / k; rr = x * x + y * y;
+      z = rr < 1 ? Math.sqrt(1 - rr) : 0;
+    }
+    if (rr >= 1) continue;
+    // tiny flowers and glints would turn into big blobs when spread out, so use the colour next to them
+    let q = o;
+    if (stride > 1 && data[o] > 215 && data[o + 1] > 200 && i + 1 < W && data[o + 7]) q = o + 4;
+    if (stride > 1 && data[q] > 215 && data[q + 1] > 200 && i > 0 && data[o - 1]) q = o - 4;
+    const color = "rgb(" + data[q] + "," + data[q + 1] + "," + data[q + 2] + ")";
+    const px = { c: [x, y, z], lead: (x * dx + y * dy) / l, lag: 0, k0: persp / (persp - z * R) };
+    if (!groups.has(color)) groups.set(color, []);
+    groups.get(color).push(px);
+    all.push(px);
+  }
+  // set off at the same moment as the photos next to them
+  if (world.leadSorted && world.leadSorted.length > 1) all.forEach(px => px.lag = lagFromLead(world.leadSorted, px.lead));
+  else { all.sort((a, b) => a.lead - b.lead); all.forEach((px, k) => px.lag = all.length > 1 ? k / (all.length - 1) : 1); }
+  world.travelPixels = { groups, size: stride * trailPix, drawnS: sl.s };
+}
+function drawTravelPixels(world, S, E, side, g, ringness, tube) {
+  const tp = world.travelPixels;
+  if (!tp) return;
+  const cx = stage.clientWidth / 2, cy = stage.clientHeight / 2, out = [0, 0, 0, 0, 0];
+  for (const [color, list] of tp.groups) {
+    travelCtx.fillStyle = color;
+    for (const px of list) {
+      travelPos(px.c, px.lag, S, E, side, g, ringness, tube, out);
+      const k = persp / (persp - out[2]);
+      const size = Math.max(1, tp.size * (out[3] / tp.drawnS) * (k / px.k0));
+      travelCtx.fillRect(Math.round(cx + out[0] * k - size / 2), Math.round(cy + out[1] * k - size / 2), Math.ceil(size), Math.ceil(size));
+    }
+  }
+}
+
+function goToPlanet(i) {
+  i = (i + worlds.length) % worlds.length;
+  if (i === focused || transition || scene) return;
+  cancelHover();
+  closeMagnifier();
+  hero.speed = 0;
+
+  const from = worlds[focused], to = worlds[i];
+  const mainSpot = from.slot, otherSpot = to.slot;
+  loadPlanet(to);                      // jump the queue if its photos aren't downloaded yet
+
+  const S1 = slots[mainSpot], E1 = slots[otherSpot];
+  const animate = !reduceMotion;
+  if (animate) {
+    prepareTravel(from, S1, E1);
+    prepareTravel(to, E1, S1);
+    capturePixels(from, S1, E1);             // the leaving planet, at its full size
+  }
+  from.slot = otherSpot;
+  to.slot = mainSpot;
+  from.dirty = to.dirty = true;        // redraw both in their new spots (needed when the animation is skipped)
+  sizePathCanvas(from);
+  sizePathCanvas(to);
+  if (animate) {
+    // draw the arriving planet at full size first, so its pixels arrive crisp instead of blown up
+    to.pathAlpha = 1;
+    drawWorldPaths(to);
+    capturePixels(to, E1, S1);
+    travelCanvas.width = stage.clientWidth;
+    travelCanvas.height = stage.clientHeight;
+    setOffstage(from, false);
+    setOffstage(to, false);
+    transition = { from, to, S1, E1, start: performance.now() };
+    worlds.forEach(w => w.label.classList.add("hidden"));
+    from.pathAlpha = to.pathAlpha = 0;
+    from.canvas.style.opacity = to.canvas.style.opacity = 0;
+    heroEl.classList.add("away");
+  }
+  focused = i;
+  setActive();
+  updateLabels();
+}
+
+function drawTransition(now) {
+  const { from, to, S1, E1, start } = transition;
+  const T = clamp01((now - start) / TRANSITION_TIME);
+  travelCtx.clearRect(0, 0, travelCanvas.width, travelCanvas.height);
+  // photos fade out as a planet heads to the side, and fade in on the planet that's arriving
+  const smooth = x => x * x * (3 - 2 * x);
+  drawTravel(from, S1, E1, -1, T, 1 - smooth(clamp01((T - 0.65) / 0.35)));   // leaving: dives into the screen
+  drawTravel(to, E1, S1, +1, T, smooth(clamp01(T / 0.35)));                   // arriving: comes out toward you
+  if (T >= 1) {
+    transition = null;
+    from.dirty = to.dirty = true;
+    from.pathAlpha = to.pathAlpha = 1;            // the real planets take over from the travelling pixels
+    from.travelPixels = to.travelPixels = null;
+    travelCtx.clearRect(0, 0, travelCanvas.width, travelCanvas.height);
+    [from, to].forEach(w => { drawResting(w); drawWorldPaths(w); });   // same frame, so there's no blink
+    heroEl.classList.remove("away");
+    positionLabels();
+  }
+}
+
+function setActive() {
+  worlds.forEach(w => {
+    const isMain = w.idx === focused;
+    w.tiles.forEach(t => t.el.classList.toggle("inactive", !isMain));
+  });
+}
+
+function updateLabels() {
+  const d = worlds[focused].data;
+  const name = document.getElementById("planet-name");
+  const sub = document.getElementById("planet-sub");
+  name.classList.add("fading");
+  sub.classList.add("fading");
+  setTimeout(() => {
+    name.textContent = d.name;
+    sub.textContent = (focused === 0 ? "Your planet" : d.owner + "'s planet") +
+      (d.photos.length || d.open ? (d.subtitle ? " \u00b7 " + d.subtitle : "") : " \u00b7 Photos coming soon");
+    name.classList.remove("fading");
+    sub.classList.remove("fading");
+  }, transition ? TRANSITION_TIME * 0.5 : 0);
+  if (!transition) positionLabels();
+  showVisiting();
+}
+
+function positionLabels() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  worlds.forEach(world => {
+    const sl = slots[world.slot];
+    if (world.idx === focused) { world.label.classList.add("hidden"); return; }
+    world.label.classList.remove("hidden");
+    world.label.style.left = (w / 2 + sl.x) + "px";
+    world.label.style.top = (h / 2 + sl.y + radius * sl.s * 1.12) + "px";
+  });
+}
+
+// ---------- size and position of the spots ----------
+// The planet screen grows taller when the planet needs it, so the whole planet always fits
+// (scroll down to see the bottom of a big planet). Sizes are still based on the window.
+const homeEl = document.getElementById("home");
+function layout() {
+  const band = document.querySelector(".home-title");
+  const bandBottom = Math.ceil(band.offsetTop + band.offsetHeight);
+  stage.style.top = bandBottom + "px";                      // planets start below the title
+  const w = stage.clientWidth;
+  const vh = Math.max(320, window.innerHeight - bandBottom); // the part of the planet screen you see at once
+  const narrow = w < 700 || vh > w * 1.1;
+  const minis = Math.max(1, worlds.length - 1);
+  const top = narrow ? 15 : 20, bottom = narrow ? 150 : 20;
+  baseRadius = narrow ? Math.min(w * 0.37, (vh - top - bottom) / 2.3)
+                      : Math.min((w - Math.min(300, w * 0.24)) * 0.38, (vh - top - bottom) / 2.3);
+  radius = baseRadius * settings.size * zoom;
+  persp = Math.max(2200, radius * 7);
+  // how far the planet reaches from its centre on screen, photo frames included
+  const reach = radius * persp / (persp - radius) * 1.1;
+  const H = Math.max(vh, Math.ceil(reach * 2 + top + bottom));
+  const wasOnPlanets = !document.body.classList.contains("past-planets");
+  homeEl.style.height = (bandBottom + H) + "px";
+  // if the planet screen just got shorter while you were on it, don't leave you stranded below it
+  const lowest = Math.max(0, homeEl.offsetTop + homeEl.offsetHeight - window.innerHeight);
+  if (wasOnPlanets) {
+    if (window.scrollY > lowest) window.scrollTo({ top: lowest, behavior: "instant" });
+    // a smooth glide that was already under way could still carry the page past the planets, so hold the limit briefly
+    scrollLimit = { y: lowest, until: performance.now() + 900 };
+  }
+  const mainY = top + Math.max(reach, (vh - top - bottom) / 2);   // centred if it fits, otherwise fully below the title
+  slots = [];
+  if (!narrow) {
+    // main planet on the left, small planets in a column on the right (within the first screenful)
+    const column = Math.min(300, w * 0.24);
+    const mini = Math.min(0.3 * baseRadius, (vh - 60) / minis / 2.9) / radius;   // small planets keep the same size on screen
+    slots.push({ x: (w - column) / 2 - w / 2 + 30, y: mainY - H / 2, s: 1 });
+    // the column of small planets is centred on the middle of the main planet
+    const gap = (vh - 60) / minis;
+    for (let k = 0; k < minis; k++) {
+      slots.push({ x: w / 2 - column / 2, y: mainY + (k - (minis - 1) / 2) * gap - H / 2 - 12, s: mini });
+    }
+  } else {
+    // phones: main planet at the top, small planets in a row underneath it
+    const mini = Math.min(0.3 * baseRadius, w / minis * 0.62 / 2.3) / radius;
+    slots.push({ x: 0, y: mainY - H / 2, s: 1 });
+    for (let k = 0; k < minis; k++) {
+      slots.push({ x: w * (k + 0.5) / minis - w / 2, y: H / 2 - 95, s: mini });
+    }
+  }
+  const th = radius * PHOTO_SIZE;
+  stage.style.setProperty("--th", th + "px");
+  stage.style.setProperty("--tw", th * 1.5 + "px");
+  stage.style.setProperty("--gw", radius * 2.4 + "px");
+  stage.style.perspective = persp + "px";
+  worlds.forEach(world => { world.dirty = true; sizePathCanvas(world); });
+  placeHero();
+  if (!transition) positionLabels();
+  updateControls();
+}
+
+// the switch button, arrows and joystick stay on screen while you're on the planets, and hide below them
+let scrollLimit = null;
+function updateControls() {
+  if (scrollLimit && performance.now() < scrollLimit.until && window.scrollY > scrollLimit.y + 1) {
+    window.scrollTo({ top: scrollLimit.y, behavior: "instant" });
+  }
+  const homeBottom = homeEl.offsetTop + homeEl.offsetHeight;
+  document.body.classList.toggle("past-planets", window.scrollY + window.innerHeight * 0.45 > homeBottom);
+}
+window.addEventListener("scroll", updateControls, { passive: true });
+
+// when you start moving, glide the page so the character is comfortably on screen
+function showHeroOnScreen() {
+  if (scene) return;
+  const r = heroEl.getBoundingClientRect();
+  const margin = Math.min(160, window.innerHeight * 0.2);
+  if (r.top < margin || r.bottom > window.innerHeight - margin) {
+    window.scrollBy({ top: (r.top + r.height / 2) - window.innerHeight / 2, behavior: "smooth" });
+  }
+}
+
+// roll a planet so its surface slides in screen direction (ux, uy) by an angle
+function roll(world, ux, uy, angle) {
+  world.rot = mulMM(axisAngle([-uy, ux, 0], angle), world.rot);
+  world.dirty = true;
+}
+
+// ================= the character =================
+// It always stands on the point of the main planet that faces you, and the planet
+// rolls underneath it, so moving takes you around the whole world.
+const heroEl = document.getElementById("hero");
+const hero = { heading: 0, moveDir: 0, speed: 0, face: 1 };
+const keys = {};
+const CHARACTERS = ["sheep", "car", "ptero"];
+
+// ---------- 8-bit sprites, drawn from little pixel maps ----------
+const SHEEP_BODY = [
+  "...WWW..WWW.....",
+  "..WWWWWWWWWWW...",
+  ".WWWWWWWWWWWWKK.",
+  "WWWWWWWWWWWKKKKK",
+  "WWWWWWWWWWWKEKKK",
+  "WWWWWWWWWWWKKKKK",
+  "wWWWWWWWWWWWKKK.",
+  ".wWWWWWWWWWWw...",
+  "..wwwwwwwwwww..."
+];
+const SHEEP_LEGS_A = ["..K.K.....K.K...", "..K.K.....K.K..."];
+const SHEEP_LEGS_B = ["...K.K...K.K....", "...K.K...K.K...."];
+const SHEEP_COLORS = { W: "#f6f3ec", w: "#cdc5b6", K: "#2e2a27", E: "#ffffff" };
+const CAR = [
+  "...RRRRRR...",
+  "..RYRRRRYR..",
+  "..RRRRRRRR..",
+  "TTRRRRRRRRTT",
+  "TTRBBBBBBRTT",
+  "TTRBBBBBBRTT",
+  "..RRRRRRRR..",
+  "..RrrrrrrR..",
+  "..RrrrrrrR..",
+  "..RrrrrrrR..",
+  "..RRRRRRRR..",
+  "..RBBBBBBR..",
+  "TTRRRRRRRRTT",
+  "TTRRRRRRRRTT",
+  "TTRRRRRRRRTT",
+  "..RLRRRRLR..",
+  "...RRRRRR..."
+];
+const CAR_COLORS = { R: "#e0443a", r: "#b4342b", Y: "#ffe45c", B: "#92d6f7", T: "#1d1d1d", L: "#8a1010" };
+const PTERO_UP = [
+  ".........YY.........",
+  ".........YY.........",
+  "........BBBB........",
+  ".......BKBBKB.......",
+  "........BBBB........",
+  "........cBBc........",
+  "...wwwwwBBBBwwwww...",
+  ".wWWWWWWBBBBWWWWWWw.",
+  "wWWWWWWWBBBBWWWWWWWw",
+  ".wWWWWWWBBBBWWWWWWw.",
+  "...wWWWWWBBWWWWWw...",
+  ".....wwWWBBWWww.....",
+  ".........BB.........",
+  "........b..b........"
+];
+const PTERO_DOWN = [
+  ".........YY.........",
+  ".........YY.........",
+  "........BBBB........",
+  ".......BKBBKB.......",
+  "........BBBB........",
+  "........cBBc........",
+  "......wwBBBBww......",
+  "....wWWWBBBBWWWw....",
+  "...wWWWWBBBBWWWWw...",
+  "....wWWWBBBBWWWw....",
+  "......wWWBBWWw......",
+  "........wBBw........",
+  ".........BB.........",
+  "........b..b........"
+];
+const PTERO_COLORS = { B: "#b8632b", c: "#8a3f17", W: "#e3a463", w: "#9a5424", Y: "#efcf7a", K: "#1d1d1d", b: "#5a3418" };
+
+function pixelArt(rows, colors, cls) {
+  // add a one-pixel dark outline so the sprite stands out on any photo
+  const H = rows.length + 2, W = rows[0].length + 2;
+  const at = (x, y) => (rows[y - 1] || "")[x - 1] || ".";
+  const needsOutline = (x, y) => [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dy]) => !".KT".includes(at(x + dx, y + dy)));
+  let rects = "";
+  for (let y = 0; y < H; y++) {
+    let x = 0;
+    while (x < W) {
+      let c = at(x, y);
+      if (c === "." && needsOutline(x, y)) c = "#";
+      if (c === ".") { x++; continue; }
+      let run = 1;
+      while (x + run < W) {
+        let n = at(x + run, y);
+        if (n === "." && needsOutline(x + run, y)) n = "#";
+        if (n !== c) break;
+        run++;
+      }
+      rects += `<rect x="${x}" y="${y}" width="${run}" height="1" fill="${c === "#" ? "#2b2420" : colors[c]}"/>`;
+      x += run;
+    }
+  }
+  return `<svg class="${cls}" viewBox="0 0 ${W} ${H}" shape-rendering="crispEdges">${rects}</svg>`;
+}
+const SPRITES =
+  '<div class="shadow"></div>' +
+  pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_A], SHEEP_COLORS, "sheep frame-a") +
+  pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_B], SHEEP_COLORS, "sheep frame-b") +
+  pixelArt(CAR, CAR_COLORS, "car") +
+  pixelArt(PTERO_UP, PTERO_COLORS, "ptero frame-a") +
+  pixelArt(PTERO_DOWN, PTERO_COLORS, "ptero frame-b");
+heroEl.innerHTML = SPRITES;
+stage.appendChild(heroEl);          // inside the 3D scene, so every browser keeps it in front of the photos
+let heroBase = "";
+
+function heroSize() {
+  return baseRadius * (settings.character === "ptero" ? 0.36 : 0.3) * Math.min(1, settings.size) * settings.charSize;
+}
+
+function placeHero() {
+  const sl = slots[0];
+  const kFront = persp / (persp - radius);         // how much the front of the planet is enlarged
+  const zh = radius * 1.12;                        // a little closer to you than the nearest photo
+  const kh = persp / (persp - zh);
+  const size = heroSize() * kFront / kh;           // size before the 3D view enlarges it
+  heroEl.style.width = heroEl.style.height = size + "px";
+  heroEl.style.marginLeft = heroEl.style.marginTop = (-size / 2) + "px";
+  heroBase = `translate3d(${sl.x * kFront / kh}px, ${sl.y * kFront / kh}px, ${zh}px) `;
+  styleHero(heroEl);
+}
+
+// how the sprite is turned: the car and pterodactyl point in 8 directions, the sheep faces left or right
+function styleHero(el) {
+  const base = el === heroEl ? heroBase : "";
+  if (settings.character === "car" || settings.character === "ptero") {
+    const snap = Math.round(hero.heading / (Math.PI / 4)) * (Math.PI / 4);
+    el.style.transform = base + `rotate(${snap}rad)`;
+  } else {
+    el.style.transform = base + `scaleX(${hero.face})`;
+  }
+}
+function lookFor(el) {
+  CHARACTERS.forEach(c => el.classList.toggle("is-" + c, settings.character === c));
+}
+
+function setCharacter(kind) {
+  settings.character = CHARACTERS.includes(kind) ? kind : "sheep";
+  lookFor(heroEl);
+  lookFor(sceneHero);
+  showSwitchButton();
+  placeHero();
+  if (scene && settings.character === "ptero") leaveScene();   // the pterodactyl can't go inside photos
+}
+
+// turn smoothly from one angle toward another, the short way round
+function turnToward(a, b, maxStep) {
+  let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+  return a + Math.max(-maxStep, Math.min(maxStep, d));
+}
+
+// W A S D move up, left, down and right on the screen. Works the same on the planet and inside a photo.
+function steer(dt, top) {
+  let ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  let iy = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0);
+  if (joy.active && joy.mag > 0.15) { ix = joy.x; iy = joy.y; top *= Math.min(1, joy.mag * 1.15); }   // a gentle push = slower
+  const pressing = ix !== 0 || iy !== 0;
+  const want = pressing ? Math.atan2(ix, -iy) : hero.heading;
+  if (settings.character === "car") {
+    // the car turns toward the direction you press and speeds up / slows down gradually
+    hero.heading = turnToward(hero.heading, want, 5 * dt);
+    const change = (pressing ? top : 0) - hero.speed;
+    hero.speed += Math.max(-2.6 * top * dt, Math.min(1.8 * top * dt, change));
+    hero.moveDir = hero.heading;
+  } else {
+    // the sheep trots and the pterodactyl flies straight in the direction you press
+    if (pressing) {
+      hero.moveDir = want;
+      // the sheep just faces left/right; the pterodactyl swings round to face where it's going
+      hero.heading = settings.character === "ptero" ? turnToward(hero.heading, want, 12 * dt) : want;
+    }
+    if (Math.abs(ix) > 0.2) hero.face = ix > 0 ? 1 : -1;
+    hero.speed += ((pressing ? top : 0) - hero.speed) * Math.min(1, dt * 14);
+  }
+  if (hero.speed < top * 0.004 && !pressing) hero.speed = 0;
+}
+
+function showMotion(el, moving) {
+  el.classList.toggle("moving", moving);
+  // one clock decides which frame shows, so the two frames can never drift apart and blink
+  const flapping = settings.character === "ptero";
+  const stepMs = flapping ? 180 : Math.max(120, 320 / Math.max(0.6, settings.speed));
+  el.classList.toggle("f2", (moving || flapping) && Math.floor(performance.now() / stepMs) % 2 === 1);
+  styleHero(el);
+}
+
+// ---------- staying on the trails ----------
+// The sheep and car must stay roughly on a trail (they can drift a little either side).
+// If a step would take them too far off, they try slightly different angles so they
+// slide round the bends. The pterodactyl can fly anywhere.
+const TRAIL_SLACK = Math.cos(Math.min(Math.PI, PATH_WIDTH * TRAIL_LOOSENESS));
+function trailCloseness(world, p) {
+  const T = world.trailPts;
+  let best = -2;
+  for (let i = 0; i < T.length; i += 3) {
+    const d = T[i] * p[0] + T[i + 1] * p[1] + T[i + 2] * p[2];
+    if (d > best) best = d;
+  }
+  return best;
+}
+function tryMove(world, dir, dist) {
+  const flying = settings.character === "ptero";
+  const free = flying || world.data.open || TRAIL_LOOSENESS >= 50;   // no need to stay on the trails
+  const water = !flying && world.lakes;                  // ...but sheep and cars can't swim
+  // where a road crosses water it works as a bridge
+  const onBridge = q => world.trailPts.length && trailCloseness(world, q) > Math.cos(PATH_WIDTH * 0.75);
+  const now = free ? 1 : trailCloseness(world, world.rot[2]);
+  const tries = free && !water ? [0] : [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4];
+  for (const off of tries) {
+    const a = dir + off;
+    const R2 = mulMM(axisAngle([-Math.cos(a), -Math.sin(a), 0], dist * Math.cos(off)), world.rot);
+    if (water && lakeDepth(world, R2[2]) > -0.02 && !onBridge(R2[2])) continue;
+    if (!free) {
+      const near = trailCloseness(world, R2[2]);
+      if (near < TRAIL_SLACK && near <= now + 1e-7) continue;
+    }
+    world.rot = R2;
+    world.dirty = true;
+    return off;
+  }
+  return null;
+}
+// turn the planet so a spot on it is right under the character
+function bringToFront(world, q) {
+  const c = mulMV(world.rot, q);
+  const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
+  if (l < 1e-6) return;
+  world.rot = mulMM(axisAngle([ax[0] / l, ax[1] / l, ax[2] / l], Math.atan2(l, c[2])), world.rot);
+  world.dirty = true;
+}
+
+// ---------- moving on the planet ----------
+const ENTER_RADIUS = Math.cos(PHOTO_SIZE * 0.42);
+const LEAVE_RADIUS = Math.cos(PHOTO_SIZE * 0.75);
+let cooldownTile = null;              // the photo you just came out of (so you don't fall straight back in)
+
+function drive(dt) {
+  const world = worlds[focused];
+  const top = (settings.character === "car" ? 1.15 : settings.character === "ptero" ? 0.85 : 0.55) * settings.speed / (settings.size * zoom);
+  steer(dt, top);
+  if (hero.speed > 0) {
+    const off = tryMove(world, hero.moveDir, hero.speed * dt);
+    if (off === null) {
+      if (settings.character === "car") hero.speed *= 0.5;          // bumped off the trail
+    } else if (off && settings.character === "car") {
+      hero.heading = turnToward(hero.heading, hero.moveDir + off, 6 * dt);   // the car follows the bend
+    }
+    if (magnified) closeMagnifier();
+  }
+  showMotion(heroEl, hero.speed > top * 0.02 || settings.character === "ptero");
+
+  // walking up a side path into a photo (not for the pterodactyl)
+  const here = world.rot[2];
+  if (cooldownTile && dot(here, cooldownTile.p) < LEAVE_RADIUS) cooldownTile = null;
+  if (settings.character !== "ptero" && hero.speed > 0) {
+    for (const t of world.tiles) {
+      if (!t.photo || t === cooldownTile) continue;
+      if (dot(here, t.p) > ENTER_RADIUS) { enterScene(t); break; }
+    }
+  }
+}
+
+// ================= inside a photo =================
+const sceneEl = document.getElementById("scene");
+const sceneFrame = document.getElementById("sceneFrame");
+const sceneImg = document.getElementById("sceneImg");
+const sceneHero = document.getElementById("sceneHero");
+const portalEl = document.getElementById("portal");
+sceneHero.innerHTML = SPRITES;
+let scene = null;
+
+function enterScene(tile) {
+  cancelHover();
+  closeMagnifier();
+  const src = sourceFor(tile.photo.file).img;
+  const ratio = src.naturalWidth ? src.naturalWidth / src.naturalHeight : 1.5;
+  const touch = matchMedia("(hover: none) and (pointer: coarse)").matches;
+  const maxH = touch ? innerHeight - 330 : innerHeight * 0.76;      // leave room for the touch buttons
+  let W = Math.min(innerWidth * 0.86, 1400), H = W / ratio;
+  if (H > maxH) { H = maxH; W = H * ratio; }
+  sceneEl.classList.toggle("touch", touch);
+  sceneImg.src = tile.photo.file;
+  sceneImg.alt = tile.photo.caption || tile.world.data.name;
+  sceneImg.style.width = W + "px";
+  sceneImg.style.height = H + "px";
+  const size = Math.max(28, Math.min(W, H) * 0.14 * settings.charSize);
+  const portalSize = Math.max(34, size * 1.25);
+  sceneHero.style.width = sceneHero.style.height = size + "px";
+  portalEl.style.width = portalEl.style.height = portalSize + "px";
+  const px = W / 2, py = H - portalSize * 0.75;        // the portal sits at the bottom, where you came in
+  portalEl.style.left = (px - portalSize / 2) + "px";
+  portalEl.style.top = (py - portalSize / 2) + "px";
+  scene = { tile, W, H, x: W / 2, y: py - portalSize * 1.4, px, py, portalR: portalSize * 0.42, armed: false, size };
+  hero.speed = 0;
+  lookFor(sceneHero);
+  placeSceneHero();
+  heroEl.classList.add("in-photo");
+  sceneEl.classList.add("open");
+}
+
+function placeSceneHero() {
+  sceneHero.style.left = (scene.x - scene.size / 2) + "px";
+  sceneHero.style.top = (scene.y - scene.size / 2) + "px";
+}
+
+function leaveScene() {
+  if (!scene) return;
+  const tile = scene.tile, world = tile.world;
+  scene = null;
+  sceneEl.classList.remove("open");
+  heroEl.classList.remove("in-photo");
+  hero.speed = 0;
+  // come back out at the photo's entrance on its side path
+  if (tile.entry) bringToFront(world, tile.entry);
+  cooldownTile = tile;
+}
+
+function sceneTick(dt, now) {
+  const top = scene.W * (settings.character === "car" ? 0.55 : 0.32) * Math.min(3, settings.speed);
+  steer(dt, top);
+  scene.x += Math.sin(hero.moveDir) * hero.speed * dt;
+  scene.y -= Math.cos(hero.moveDir) * hero.speed * dt;
+  placeSceneHero();
+  showMotion(sceneHero, hero.speed > top * 0.02);
+  drawPortal(now);
+  const d = Math.hypot(scene.x - scene.px, scene.y - scene.py);
+  if (d > scene.portalR * 2) scene.armed = true;         // the portal works once you've stepped away from it
+  const off = scene.x < 0 || scene.y < 0 || scene.x > scene.W || scene.y > scene.H;
+  if (off || (scene.armed && d < scene.portalR)) leaveScene();
+}
+
+// a swirling 8-bit portal, redrawn every frame on a 16 x 16 pixel canvas
+const portalCtx = portalEl.getContext("2d");
+const portalImg = portalCtx.createImageData(16, 16);
+const PORTAL_COLORS = [[42, 13, 77], [107, 47, 191], [176, 108, 240], [240, 216, 255]];
+function drawPortal(now) {
+  const d = portalImg.data, t = now / 1000;
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const o = (y * 16 + x) * 4, dx = x - 7.5, dy = y - 7.5, r = Math.hypot(dx, dy);
+    if (r > 7.9) { d[o + 3] = 0; continue; }
+    let c;
+    if (r > 6.9) c = [26, 8, 51];
+    else if (r < 1.3) c = [255, 255, 255];
+    else {
+      const v = Math.atan2(dy, dx) / (Math.PI * 2) * 3 + r * 0.32 - t * 1.6;
+      c = PORTAL_COLORS[Math.floor(((v % 1) + 1) % 1 * 4)];
+    }
+    d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+  }
+  portalCtx.putImageData(portalImg, 0, 0);
+}
+
+const typing = e => e.target.closest && e.target.closest("input, textarea, select");
+// the arrow keys work just like W A S D
+const MOVE_KEYS = { KeyW: "KeyW", KeyA: "KeyA", KeyS: "KeyS", KeyD: "KeyD",
+                    ArrowUp: "KeyW", ArrowLeft: "KeyA", ArrowDown: "KeyS", ArrowRight: "KeyD" };
+document.addEventListener("keydown", e => {
+  if (typing(e) || e.metaKey || e.ctrlKey) return;
+  const onPlanets = scene || !document.body.classList.contains("past-planets");
+  const k = MOVE_KEYS[e.code];
+  if (k) {
+    if (!onPlanets) return;            // further down the page, the arrow keys scroll as normal
+    if (!keys[k]) showHeroOnScreen();
+    keys[k] = true;
+    e.preventDefault();
+  }
+  if (e.code === "KeyC" && onPlanets) {
+    setCharacter(CHARACTERS[(CHARACTERS.indexOf(settings.character) + 1) % CHARACTERS.length]);
+  }
+  if (e.code === "Escape" && scene) leaveScene();
+});
+document.addEventListener("keyup", e => { keys[MOVE_KEYS[e.code] || e.code] = false; });
+window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+// on-screen joystick for phones and tablets: push in any direction, further = faster
+const joy = { active: false, x: 0, y: 0, mag: 0, id: null };
+const joyEl = document.getElementById("joystick"), knob = joyEl.querySelector(".knob");
+function joyMove(e) {
+  const r = joyEl.getBoundingClientRect(), max = r.width * 0.36;
+  let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  const d = Math.hypot(dx, dy);
+  if (d > max) { dx *= max / d; dy *= max / d; }
+  knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  joy.x = dx / max; joy.y = dy / max; joy.mag = Math.min(1, d / max);
+}
+function joyEnd() {
+  joy.active = false; joy.x = joy.y = joy.mag = 0; joy.id = null;
+  joyEl.classList.remove("active");
+  knob.style.transform = "";
+}
+joyEl.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  joy.active = true; joy.id = e.pointerId;
+  try { joyEl.setPointerCapture(e.pointerId); } catch (err) {}   // keep tracking the finger even if it slides off
+  joyEl.classList.add("active");
+  showHeroOnScreen();
+  joyMove(e);
+});
+joyEl.addEventListener("pointermove", e => { if (joy.active && e.pointerId === joy.id) joyMove(e); });
+joyEl.addEventListener("pointerup", joyEnd);
+joyEl.addEventListener("pointercancel", joyEnd);
+joyEl.addEventListener("contextmenu", e => e.preventDefault());
+
+// ================= settings =================
+// These come straight from the values near the top of the script (there's no settings panel).
+const settings = {
+  character: ["sheep", "car", "ptero"].includes(me.avatar && me.avatar.character) ? me.avatar.character : CHARACTER,
+  charSize: CHARACTER_SIZE, size: PLANET_SIZE, speed: SPEED,
+  ground: GROUND === "grass" ? "grass" : "clear",
+  pixels: PIXEL_STEPS.includes(PHOTO_PIXELS) ? PHOTO_PIXELS : 32
+};
+function saveSettings() {}            // nothing is remembered between visits
+
+// the switch-character button shows the character you are now; tap / click it for the next one
+const switchBtn = document.getElementById("switchChar");
+const BUTTON_ART = {
+  sheep: pixelArt([...SHEEP_BODY, ...SHEEP_LEGS_A], SHEEP_COLORS, ""),
+  car: pixelArt(CAR, CAR_COLORS, ""),
+  ptero: pixelArt(PTERO_UP, PTERO_COLORS, "")
+};
+function showSwitchButton() {
+  switchBtn.innerHTML = BUTTON_ART[settings.character];
+  switchBtn.setAttribute("aria-label", "Switch character (now: " + ({ sheep: "sheep", car: "car", ptero: "pterodactyl" })[settings.character] + ")");
+}
+switchBtn.addEventListener("click", () => {
+  setCharacter(CHARACTERS[(CHARACTERS.indexOf(settings.character) + 1) % CHARACTERS.length]);
+});
+
+document.getElementById("prevPlanet").addEventListener("click", () => goToPlanet(focused - 1));
+document.getElementById("nextPlanet").addEventListener("click", () => goToPlanet(focused + 1));
+
+// which small planet (if any) is under a point on the screen
+function miniAt(clientX, clientY) {
+  const r = stage.getBoundingClientRect();
+  const x = clientX - r.left - r.width / 2, y = clientY - r.top - r.height / 2;
+  return worlds.find(w => {
+    if (w.idx === focused) return false;
+    const sl = slots[w.slot];
+    return Math.hypot(x - sl.x, y - sl.y) < radius * sl.s * 1.15;
+  });
+}
+
+// ---------- clicking small planets (the main planet is moved with W A S D) ----------
+let moved = 0, pressedMini = null, mouse = { x: -1, y: -1 };
+
+stage.addEventListener("pointerdown", e => {
+  if (magnified || transition) return;
+  if (e.target.closest("button")) return;
+  moved = 0;
+  pressedMini = miniAt(e.clientX, e.clientY);
+});
+window.addEventListener("pointermove", e => {
+  mouse = { x: e.clientX, y: e.clientY };
+  if (magnified) { checkMagnifierHover(e); return; }
+  if (!transition) stage.classList.toggle("over-mini", !!miniAt(e.clientX, e.clientY));
+  if (pressedMini) moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+});
+function endPress(e) {
+  if (pressedMini) {
+    const target = pressedMini;
+    pressedMini = null;
+    if (moved < 10) goToPlanet(target.idx);
+  }
+  if (e && e.pointerType !== "mouse") cancelHover();
+}
+window.addEventListener("pointerup", endPress);
+// a swipe that turns into a page scroll is not a tap on a small planet
+window.addEventListener("pointercancel", () => { pressedMini = null; cancelHover(); });
+// touch: tap anywhere to close an open photo
+window.addEventListener("pointerdown", e => {
+  if (magnified && magnified.pointerType !== "mouse" && e.pointerType !== "mouse" &&
+      performance.now() - magnified.at > 250 && !e.target.closest("#joystick")) {
+    closeMagnifier();
+    e.stopPropagation();
+  }
+}, true);
+
+// ---------- hover to magnify ----------
+let hoverTile = null, hoverTimer = null, magnified = null;
+const mag = document.getElementById("magnifier");
+const magImg = mag.querySelector("img");
+const magCap = mag.querySelector(".caption");
+
+function attachHover(tile) {
+  // touch: a quick tap on a photo opens it (a swipe scrolls the page instead)
+  let tap = null;
+  tile.el.addEventListener("pointerdown", e => {
+    if (e.pointerType !== "mouse") tap = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  tile.el.addEventListener("pointerup", e => {
+    if (e.pointerType === "mouse" || !tap) return;
+    const quick = performance.now() - tap.t < 450 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 12;
+    tap = null;
+    if (!quick || magnified || transition || scene || tile.world.idx !== focused) return;
+    if (tile.el.classList.contains("back")) return;
+    magnify(tile, "touch");
+  });
+  tile.el.addEventListener("pointercancel", () => { tap = null; });
+  tile.el.addEventListener("pointerenter", e => {
+    if (e.pointerType !== "mouse") return;            // hover-to-open is for the mouse only
+    if (magnified || transition || scene || tile.el.classList.contains("back")) return;
+    if (tile.world.idx !== focused) return;
+    cancelHover();
+    hoverTile = tile;
+    tile.el.classList.add("charging");
+    hoverTimer = setTimeout(() => magnify(tile, e.pointerType), HOVER_DELAY);
+  });
+  tile.el.addEventListener("pointerleave", e => {
+    if (hoverTile === tile && e.pointerType === "mouse") cancelHover();
+  });
+}
+
+function cancelHover() {
+  clearTimeout(hoverTimer);
+  hoverTimer = null;
+  if (hoverTile) hoverTile.el.classList.remove("charging");
+  hoverTile = null;
+}
+
+function magnify(tile, pointerType) {
+  if (transition) return;
+  tile.el.classList.remove("charging");
+  // if the planet rolled the photo out from under the mouse, don't open it
+  if (pointerType === "mouse") {
+    const under = document.elementFromPoint(mouse.x, mouse.y);
+    if (!under || !tile.el.contains(under)) { hoverTile = null; return; }
+  }
+
+  const r = tile.el.getBoundingClientRect();
+  const ratio = tile.img.naturalWidth ? tile.img.naturalWidth / tile.img.naturalHeight : 1.5;
+  let w = Math.min(innerWidth * (innerWidth < 700 ? 0.94 : 0.7), 1000), h = w / ratio;
+  if (h > innerHeight * 0.7) { h = innerHeight * 0.7; w = h * ratio; }
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const left = Math.max(12, Math.min(cx - w / 2, innerWidth - w - 12));
+  const top = Math.max(12, Math.min(cy - h / 2, innerHeight - h - 12));
+
+  magImg.src = tile.photo.file;
+  magImg.alt = tile.photo.caption;
+  magCap.textContent = tile.photo.caption || "";
+
+  mag.style.transition = "none";
+  Object.assign(mag.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+  mag.offsetWidth;
+  mag.style.transition = "";
+  mag.classList.add("open");
+  Object.assign(mag.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
+
+  magnified = { pointerType, at: performance.now() };
+  hoverTile = null;
+  heroEl.classList.add("hidden-for-photo");
+}
+
+function checkMagnifierHover(e) {
+  if (!magnified || magnified.pointerType !== "mouse") return;
+  const r = mag.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+    closeMagnifier();
+  }
+}
+function closeMagnifier() {
+  mag.classList.remove("open");
+  heroEl.classList.remove("hidden-for-photo");
+  magnified = null;
+}
+mag.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") closeMagnifier(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && magnified) closeMagnifier(); });
+
+// ---------- animation loop ----------
+let frame = 0, lastTime = performance.now();
+function tick(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  // glide the world size toward the flying / walking size
+  const zoomTarget = settings.character === "ptero" ? FLYING_ZOOM : 1;
+  if (Math.abs(zoom - zoomTarget) > 0.001 && !transition) {
+    zoom += (zoomTarget - zoom) * Math.min(1, dt * 4);
+    if (Math.abs(zoom - zoomTarget) <= 0.001) zoom = zoomTarget;
+    layout();
+  }
+  if (transition) {
+    drawTransition(now);
+  } else if (scene) {
+    sceneTick(dt, now);
+  } else {
+    drive(dt);
+    if (++frame % 120 === 0) worlds[focused].rot = orthonormalize(worlds[focused].rot);
+    for (const w of worlds) {
+      if (w.pathAlpha < 1) { w.pathAlpha = Math.min(1, w.pathAlpha + dt * 3); w.pathsDirty = true; }
+      if (w.dirty) drawResting(w);
+      if (w.pathsDirty) drawWorldPaths(w);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+// ================= Worlds: who you're playing as, and visiting friends =================
+const asSelect = document.getElementById("playingAs");
+asSelect.innerHTML = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
+asSelect.value = me.id;
+// switching who you play as starts the page again from that person's own planet
+asSelect.addEventListener("change", () => { location.search = "?as=" + encodeURIComponent(asSelect.value); });
+
+const friendList = document.getElementById("friendList");
+const homeBtn = document.getElementById("goHome");
+if (!friends.length) friendList.innerHTML = '<span class="no-friends">No friends yet</span>';
+worlds.slice(1).forEach(w => {
+  const b = document.createElement("button");
+  b.className = "friend";
+  b.textContent = w.data.owner;
+  b.style.setProperty("--dot", w.data.color);
+  b.title = "Visit " + w.data.owner + "'s planet: " + w.data.name;
+  b.addEventListener("click", () => goToPlanet(w.idx));
+  w.friendBtn = b;
+  friendList.appendChild(b);
+});
+homeBtn.addEventListener("click", () => goToPlanet(0));
+
+// the bar shows whose planet you're on; the address keeps it too (?as=...&visit=...), so a reload stays put
+function showVisiting() {
+  homeBtn.hidden = focused === 0;
+  worlds.forEach(w => w.friendBtn && w.friendBtn.classList.toggle("here", w.idx === focused));
+  const q = "?as=" + encodeURIComponent(me.id) + (focused ? "&visit=" + encodeURIComponent(worlds[focused].data.id) : "");
+  if (location.search !== q) history.replaceState(null, "", location.pathname + q);
+}
+
+// opened with ?visit=friend: start on that friend's planet (no trip animation)
+const startAt = worlds.findIndex(w => w.idx > 0 && w.data.id === params.get("visit"));
+if (startAt > 0) {
+  worlds[startAt].slot = 0;
+  worlds[0].slot = startAt;
+  focused = startAt;
+}
+
+layout();
+setCharacter(settings.character);
+setActive();
+updateLabels();
+window.addEventListener("resize", layout);
+requestAnimationFrame(tick);
+loadAllPlanets();
