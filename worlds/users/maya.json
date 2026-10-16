@@ -1,0 +1,21 @@
+{
+  "id": "maya",
+  "name": "Maya",
+  "avatar": {"character": "car"},
+  "friends": ["sean", "juno"],
+  "planet": {
+    "name": "Road Trip",
+    "subtitle": "Across the USA",
+    "theme": "usa",
+    "glow": "#e8a160",
+    "photos": [
+      "images/USA1.jpg",
+      "images/USA2.jpg",
+      "images/USA3.jpg",
+      "images/USA4.jpg",
+      "images/USA5.jpg",
+      "images/USA6.jpg",
+      "images/USA7.jpg"
+    ]
+  }
+}

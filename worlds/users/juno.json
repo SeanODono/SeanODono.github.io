@@ -1,0 +1,25 @@
+{
+  "id": "juno",
+  "name": "Juno",
+  "avatar": {"character": "sheep"},
+  "friends": ["sean", "maya"],
+  "planet": {
+    "name": "Neon Nights",
+    "subtitle": "Band shows",
+    "theme": "night",
+    "glow": "#8a5cf0",
+    "photos": [
+      "images/friends1.jpg",
+      "images/friends2.jpg",
+      "images/friends3.jpg",
+      "images/friends4.jpg",
+      "images/friends5.jpg",
+      "images/friends6.jpg",
+      "images/friends7.jpg",
+      "images/friends8.jpg",
+      "images/friends9.jpg",
+      "images/friends10.jpg",
+      "images/friends11.jpg"
+    ]
+  }
+}

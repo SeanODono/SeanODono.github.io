@@ -1,0 +1,503 @@
+:root {
+  --bg: #ffffff;
+  --text: #1a1a1a;
+  --muted: #777;
+  --accent: #b08a4a;
+  --placeholder: #eee;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.6;
+}
+
+/* ---------- Top navigation ---------- */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(rgba(255,255,255,0.95), rgba(255,255,255,0));
+  z-index: 50;
+}
+nav a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+  font-family: system-ui, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+nav a:hover { color: var(--accent); }
+
+/* ---------- Home: planets ---------- */
+#home {
+  position: relative;
+  height: 100vh;               /* the script makes this taller when a big planet needs the room */
+  height: 100svh;
+  min-height: 560px;
+  overflow: hidden;
+}
+#switchChar, #joystick, .arrow { transition: opacity 0.2s; }
+body.past-planets #switchChar,
+body.past-planets #joystick, body.past-planets .arrow { opacity: 0; pointer-events: none; }
+#stage {
+  position: absolute;
+  inset: 0;
+  touch-action: manipulation;   /* swipes scroll the page; taps still open photos and switch planets */
+  user-select: none;
+  -webkit-user-select: none;
+  perspective-origin: 50% 50%;
+}
+#stage.over-mini { cursor: pointer; }
+
+/* trail canvases: one per planet, sitting between the far and near photos */
+canvas.paths {
+  position: absolute;
+  pointer-events: none;
+  image-rendering: pixelated;      /* keep the trail pixels hard-edged, 8-bit style */
+  image-rendering: crisp-edges;
+  z-index: 20000;
+}
+#travel {
+  position: absolute;
+  left: 0; top: 0;
+  pointer-events: none;
+  z-index: 20000;
+  image-rendering: pixelated;
+}
+
+/* ---------- character ---------- */
+#hero {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 40000;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  will-change: transform, opacity;   /* own graphics layer, so it never flickers */
+  backface-visibility: hidden;
+}
+#hero.away, #hero.hidden-for-photo { opacity: 0; }
+#hero svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  image-rendering: pixelated;
+}
+#hero .shadow {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.22);
+}
+#hero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
+#hero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; transform: translate(4%, 4%); }
+#hero.is-car .car { display: block; }
+/* two-frame trot / flap: the script flips the "f2" class, so exactly one frame is ever shown */
+#hero.is-sheep .sheep.frame-a, #sceneHero.is-sheep .sheep.frame-a,
+#hero.is-ptero .ptero.frame-a, #sceneHero.is-ptero .ptero.frame-a { display: block; }
+#hero.f2 .frame-a, #sceneHero.f2 .frame-a { display: none !important; }
+#hero.is-sheep.f2 .sheep.frame-b, #sceneHero.is-sheep.f2 .sheep.frame-b { display: block; transform: translateY(-4%); }
+#hero.is-ptero.f2 .ptero.frame-b, #sceneHero.is-ptero.f2 .ptero.frame-b { display: block; }
+
+#hero.in-photo { opacity: 0; }
+/* the pterodactyl flaps all the time, with a small faint shadow far below it */
+#hero.is-ptero .shadow { left: 34%; right: 34%; top: 34%; bottom: 34%; background: rgba(0,0,0,0.13); transform: scale(1.4); }
+.seg button { font-size: 0.72rem; }
+
+/* ---------- inside a photo ---------- */
+#scene {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  background: rgba(255, 255, 255, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+#scene.open { opacity: 1; pointer-events: auto; }
+#scene.touch { justify-content: flex-start; padding-top: 90px; }
+#scene.touch #sceneHint { display: none; }
+#sceneFrame {
+  position: relative;
+  --th: 220px;
+  transform: scale(0.92);
+  transition: transform 0.3s;
+}
+#scene.open #sceneFrame { transform: scale(1); }
+#sceneImg { display: block; object-fit: cover; }
+#portal, #sceneHero {
+  position: absolute;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+#sceneHero svg { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+#sceneHero .shadow { position: absolute; border-radius: 50%; background: rgba(0,0,0,0.25); }
+#sceneHero.is-sheep .shadow { left: 14%; right: 14%; top: 66%; height: 14%; }
+#sceneHero.is-car .shadow { left: 26%; right: 26%; top: 10%; bottom: 6%; }
+#sceneHero.is-car .car { display: block; }
+#sceneHint {
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* ---------- settings ---------- */
+/* switch-character button: shows the character you are now */
+#switchChar {
+  position: fixed;
+  left: 1rem; bottom: 1rem;
+  width: 3rem; height: 3rem;
+  border-radius: 50%;
+  border: 1px solid #e2e2e2;
+  background: rgba(255,255,255,0.92);
+  padding: 0.45rem;
+  cursor: pointer;
+  z-index: 60;
+  transition: border-color 0.2s, transform 0.15s;
+}
+#switchChar:hover { border-color: var(--accent); }
+#switchChar:active { transform: scale(0.92); }
+#switchChar svg { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+/* ---------- touch joystick ---------- */
+#joystick {
+  display: none;
+  position: fixed;
+  left: 50%; bottom: 2rem;
+  width: 7rem; height: 7rem;
+  margin-left: -3.5rem;
+  border-radius: 50%;
+  border: 1px solid #ddd;
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(2px);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  z-index: 400;            /* stays usable while you're inside a photo */
+}
+#joystick .knob {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 2.9rem; height: 2.9rem;
+  margin: -1.45rem 0 0 -1.45rem;
+  border-radius: 50%;
+  background: rgba(26,26,26,0.82);
+  transition: transform 0.12s;
+}
+#joystick.active .knob { transition: none; }
+@media (hover: none) and (pointer: coarse) {
+  #joystick { display: block; }
+}
+
+.tile, .glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  will-change: transform, opacity;
+}
+/* 8-bit picture frame: dark outline with notched pixel corners, then a bevelled gold ring */
+.tile, .pixel-frame {
+  --bp: max(2px, calc(var(--th) * 0.055));
+  background: #2b2420;
+  padding: var(--bp);
+  clip-path: polygon(var(--bp) 0, calc(100% - var(--bp)) 0, 100% var(--bp), 100% calc(100% - var(--bp)),
+                     calc(100% - var(--bp)) 100%, var(--bp) 100%, 0 calc(100% - var(--bp)), 0 var(--bp));
+}
+.tile img, .tile canvas, .pixel-frame > img {
+  box-sizing: border-box;
+  border: var(--bp) solid;
+  border-color: #f2cf78 #a8792f #a8792f #f2cf78;
+  background: var(--placeholder);
+}
+.tile {
+  width: var(--tw);
+  height: var(--th);
+  margin-left: calc(var(--tw) / -2);
+  margin-top: calc(var(--th) / -2);
+}
+.glow {
+  width: var(--gw);
+  height: var(--gw);
+  margin-left: calc(var(--gw) / -2);
+  margin-top: calc(var(--gw) / -2);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow) 0%, transparent 68%);
+  pointer-events: none;
+}
+.tile img, .tile canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  transition: filter 0.2s;
+}
+/* pixelated photos: a tiny copy blown up with hard square pixels */
+.tile canvas { display: none; image-rendering: pixelated; image-rendering: crisp-edges; }
+.tile.pixel canvas { display: block; }
+.tile.pixel img { display: none; }
+.tile.back, .tile.empty, .tile.inactive { pointer-events: none; }
+.tile.empty { background: #bdbdbd; }
+.tile.offstage { display: none; }
+.tile:not(.back):not(.inactive):hover img, .tile:not(.back):not(.inactive):hover canvas { filter: brightness(1.08); }
+/* progress bar that fills while hovering */
+.tile::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 3px;
+  width: 0;
+  background: var(--accent);
+}
+.tile.charging::after {
+  width: 100%;
+  transition: width var(--hover-delay, 0.5s) linear;
+}
+
+.planet-label {
+  position: absolute;
+  transform: translateX(-50%);
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  z-index: 6;
+  transition: opacity 0.35s;
+}
+.planet-label:hover { color: var(--accent); }
+.planet-label.hidden { opacity: 0; pointer-events: none; }
+
+/* the title sits in its own band under the menu; the planets live in the space below it */
+.home-title {
+  position: absolute;
+  top: 2.8rem;
+  left: 0; right: 0;
+  padding: 0.3rem 1.5rem 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 1.1rem;
+  background: var(--bg);
+  border-bottom: 1px solid #eee;
+  pointer-events: none;
+  z-index: 7;
+}
+.home-title h1 {
+  font-weight: normal;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: clamp(1rem, 2.2vw, 1.4rem);
+}
+#planet-name {
+  font-size: clamp(1.25rem, 3vw, 1.9rem);
+  line-height: 1.2;
+  transition: opacity 0.4s;
+}
+#planet-sub { color: var(--muted); font-size: 0.9rem; transition: opacity 0.4s; }
+.fading { opacity: 0; }
+.hint {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+  margin-top: 0.15rem;
+}
+#stage { overflow: hidden; }
+
+.arrow {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 2.6rem;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  z-index: 6;
+}
+.arrow:hover { color: var(--text); }
+#prevPlanet { left: 0.3rem; }
+#nextPlanet { right: 0.3rem; }
+
+/* ---------- Magnified photo ---------- */
+#magnifier {
+  position: fixed;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  transition: left 0.35s ease, top 0.35s ease, width 0.35s ease,
+              height 0.35s ease, opacity 0.25s ease;
+}
+#magnifier.open { opacity: 1; pointer-events: auto; }
+#magnifier img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#magnifier .caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 1.5rem 1rem 0.7rem;
+  background: linear-gradient(transparent, rgba(0,0,0,0.75));
+  color: #fff;
+  font-size: 0.95rem;
+}
+#magnifier .caption:empty { display: none; }
+
+/* ---------- Gallery sections ---------- */
+section.content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 4rem 1rem 3rem;
+}
+section.content h2 {
+  font-weight: normal;
+  font-size: 1.4rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 0.5rem;
+}
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.75rem;
+}
+.gallery img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  cursor: zoom-in;
+  transition: opacity 0.2s;
+  background: var(--placeholder);
+}
+.gallery img:hover { opacity: 0.85; }
+.videos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 1rem;
+}
+.videos iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; }
+#about p { max-width: 650px; color: #444; }
+.contact {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.contact-label {
+  display: inline-block;
+  width: 6.5rem;
+  color: var(--muted);
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.contact a { color: var(--accent); text-decoration: none; }
+.contact a:hover { text-decoration: underline; }
+.empty-note { color: var(--muted); }
+footer {
+  text-align: center;
+  color: var(--muted);
+  padding: 3rem 1rem;
+  font-size: 0.85rem;
+}
+
+/* ---------- Gallery lightbox ---------- */
+#lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.97);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+#lightbox.open { display: flex; }
+#lightbox img { max-width: 95vw; max-height: 85vh; object-fit: contain; }
+#lightbox .caption { color: var(--muted); margin-top: 1rem; }
+#lightbox button {
+  position: absolute;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 2.5rem;
+  cursor: pointer;
+  padding: 1rem;
+}
+#close { top: 0.5rem; right: 1rem; }
+#prev { left: 0.5rem; }
+#next { right: 0.5rem; }
+
+@media (max-width: 700px) {
+  .videos { grid-template-columns: 1fr; }
+  .gallery { grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
+  nav { gap: 0.4rem 0.9rem; }
+  .home-title { top: 4.4rem; padding: 0.2rem 1rem 0.45rem; }
+  .hint { display: none; }
+  .arrow { font-size: 2rem; padding: 0.5rem; }
+  #switchChar { bottom: 2.2rem; }
+}
+
+/* ---------- Worlds: playing as / visiting friends ---------- */
+.worlds-bar {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.7rem;
+  margin-top: 0.3rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  pointer-events: auto;          /* the title band ignores clicks, but these controls need them */
+}
+.worlds-bar select, .worlds-bar button {
+  font: inherit;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.worlds-bar select:hover, .worlds-bar button:hover { border-color: var(--accent); }
+#friendList { display: contents; }
+.friend::before {                /* a little dot in the planet's glow colour */
+  content: "";
+  display: inline-block;
+  width: 0.55rem; height: 0.55rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: var(--dot);
+}
+.friend.here { border-color: var(--text); font-weight: 600; }
+#goHome { border-color: var(--accent); color: var(--accent); }
+#goHome[hidden] { display: none; }
+.no-friends { font-style: italic; }
+@media (max-width: 700px) {
+  .worlds-bar { font-size: 0.7rem; gap: 0.3rem 0.5rem; }
+  .friends-label { display: none; }
+}

@@ -658,7 +658,7 @@
     // ---------- navigation links ----------
     const nav = document.getElementById("nav");
     const navLinks = [["home", "Home"], ...planets.filter(p => !p.open).map(p => [p.id, p.name]), ["video", "Video"], ["about", "About"]];
-    nav.innerHTML = navLinks.map(([id, name]) => `<a href="#${id}">${name}</a>`).join("");
+    nav.innerHTML = navLinks.map(([id, name]) => `<a href="#${id}">${name}</a>`).join("") + `<a href="worlds.html">Worlds</a>`;
 
     // ---------- small vector / matrix helpers ----------
     const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];

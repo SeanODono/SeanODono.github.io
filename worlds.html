@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Worlds · Sean O'Donovan Photography</title>
+  <meta name="description" content="Worlds demo: everyone gets their own photo planet">
+  <link rel="stylesheet" href="worlds/worlds.css">
+</head>
+<body>
+
+  <nav id="nav">
+    <a href="index.html">Portfolio</a>
+    <a href="worlds.html">Worlds</a>
+  </nav>
+
+  <section id="home">
+    <div id="stage"></div>
+    <div class="home-title">
+      <h1>Worlds</h1>
+      <div id="planet-name"></div>
+      <div id="planet-sub"></div>
+      <div class="worlds-bar">
+        <label>Playing as <select id="playingAs" aria-label="Playing as"></select></label>
+        <span class="friends-label">Visit a friend:</span>
+        <span id="friendList"></span>
+        <button id="goHome" hidden>&larr; Back to my planet</button>
+      </div>
+      <div class="hint"><b>W A S D</b> or <b>arrow keys</b> to move &middot; follow a trail into a photo to step inside &middot; <b>C</b> or the button bottom-left to switch sheep / car / pterodactyl &middot; Hover a photo to enlarge &middot; Click a friend or a small planet to travel there</div>
+    </div>
+
+    <!-- the character: an 8-bit sheep, car or pterodactyl (drawn by the script) -->
+    <div id="hero" aria-hidden="true"></div>
+
+    <!-- touch controls (only shown on phones / tablets) -->
+    <div id="joystick" aria-label="Move"><div class="knob"></div></div>
+
+    <!-- switch character (sheep -> car -> pterodactyl) -->
+    <button id="switchChar" aria-label="Switch character" title="Switch character (C)"></button>
+    <button class="arrow" id="prevPlanet" aria-label="Previous planet">&#8249;</button>
+    <button class="arrow" id="nextPlanet" aria-label="Next planet">&#8250;</button>
+  </section>
+
+  <!-- inside a photo -->
+  <div id="scene" aria-hidden="true">
+    <div id="sceneFrame" class="pixel-frame">
+      <img id="sceneImg" alt="">
+      <canvas id="portal" width="16" height="16"></canvas>
+      <div id="sceneHero"></div>
+    </div>
+    <div id="sceneHint"><b>W A S D</b> or <b>arrow keys</b> to walk around &middot; walk off the photo or into the portal to leave</div>
+  </div>
+
+  <div id="magnifier">
+    <img src="" alt="">
+    <div class="caption"></div>
+  </div>
+
+  <!-- the game: the same engine as the home page, with planets built from worlds/users/*.json -->
+  <script type="module" src="worlds/game.js"></script>
+</body>
+</html>
