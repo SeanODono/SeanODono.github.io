@@ -3,24 +3,22 @@
 //  is built from a saved description (see worlds/users/*.json)
 //  instead of the hardcoded list. All data comes through worlds/data.js.
 // ============================================================
-import { listUsers, getUser, getPlanet, getFriends } from "./data.js";
+import * as db from "./data.js";
 
 // who you're playing as (the "Playing as" switcher) and whose planet you're on: worlds.html?as=sean&visit=maya
 const params = new URLSearchParams(location.search);
-const users = await listUsers();
-const me = await getUser(params.get("as")) || await getUser("sean") || await getUser(users[0].id);
-const friends = await getFriends(me.id);
+const users = await db.listUsers();
+const me = await db.getUser(params.get("as")) || await db.getUser("sean") || await db.getUser(users[0].id);
+const friends = await db.getFriends(me.id);
 // the planets on screen: yours first, then your friends'
-const planets = await Promise.all([me, ...friends].map(async u => toPlanet(u, await getPlanet(u.id))));
+const planets = await Promise.all([me, ...friends].map(async u => toPlanet(u, await db.getPlanet(u.id))));
 
 // a saved planet description -> the planet entry the game uses
 function toPlanet(user, saved) {
   return {
     id: user.id, owner: user.name, name: saved.name || user.name + "'s planet", subtitle: saved.subtitle || "",
-    color: saved.glow || "#ccc", theme: saved.theme, ground: saved.ground, flowers: saved.flowers,
-    trail: saved.trail, landmarks: saved.landmarks, decor: saved.decor,
-    open: !!saved.open, lakes: saved.lakes || 0,
-    photos: (saved.photos || []).map(ph => typeof ph === "string" ? { file: ph, caption: "" } : { file: ph.file, caption: ph.caption || "" })
+    color: saved.glow || "#ccc", trail: saved.trail, biomes: saved.biomes, decorations: saved.decorations,
+    photos: saved.photos || []          // each { id, file (full size), thumb (small copy), caption }
   };
 }
 
@@ -149,7 +147,7 @@ function tinyCopy(file, w) {
 }
 function pixelateTile(tile) {
   const w = settings.pixels;
-  const tiny = w ? tinyCopy(tile.photo.file, w) : null;
+  const tiny = w ? tinyCopy(tile.photo.thumb || tile.photo.file, w) : null;
   if (!tiny) { tile.el.classList.remove("pixel"); return; }
   if (tile.pix.width !== tiny.width || tile.pix.height !== tiny.height) {
     tile.pix.width = tiny.width; tile.pix.height = tiny.height;
@@ -165,12 +163,13 @@ function pixelateAll() { pixelTiles.forEach(pixelateTile); }
 const planetLoads = new Map();
 function loadPlanet(world) {
   if (planetLoads.has(world)) return planetLoads.get(world);
-  const files = [...new Set(world.data.photos.map(p => p.file))];
+  const files = [...new Set(world.data.photos.map(p => p.thumb || p.file))];   // tiles only need the small copies
   const done = Promise.all(files.map(f => sourceFor(f).ready));
   for (const t of world.tiles) {
     if (!t.photo) continue;
-    sourceFor(t.photo.file).ready.then(() => {
-      if (!t.img.getAttribute("src")) t.img.src = t.photo.file;   // already downloaded, so this is instant
+    const src = t.photo.thumb || t.photo.file;
+    sourceFor(src).ready.then(() => {
+      if (!t.img.getAttribute("src")) t.img.src = src;   // already downloaded, so this is instant
       pixelateTile(t);
     });
   }
@@ -346,44 +345,67 @@ const DECOR = {
     "SSSSSSSSSSSSSSSSS",
     "SsSsSsSsSsSsSsSsS"],
     colors: { K: "#9a9ab8", T: "#9a9ab8", Y: "#fff27a", P: "#ff5fd2", C: "#5ff2ff", N: "#4a4a5e", S: "#7b55a0", s: "#5d3f7d" } },
-  lamp: { rows: [".Y.", "YYY", ".Y.", ".K.", ".K.", ".K.", ".K.", "KKK"], colors: { Y: "#ff5fd2", K: "#9a9ab8" } }
+  lamp: { rows: [".Y.", "YYY", ".Y.", ".K.", ".K.", ".K.", ".K.", "KKK"], colors: { Y: "#ff5fd2", K: "#9a9ab8" } },
+  // added for the Worlds biomes
+  snowpine: { rows: ["..W..", ".WGW.", "..G..", ".WGW.", "WGgGW", ".GGG.", "GgGGg", "..T.."],
+    colors: { W: "#f4f8fb", G: "#1e4f2c", g: "#2f6e3f", T: "#5a3a22" } },
+  palm: { rows: [".LL.LL.", "LLLLLLL", "L..T..L", "...T...", "...T...", "..T....", "..T...."], colors: { L: "#3f8f3a", T: "#8a6a3a" } },
+  igloo: { rows: ["..WWW..", ".WwWwW.", "WWWWWWW", "WwWDWwW", "WWWDWWW"], colors: { W: "#f4f8fb", w: "#b9d3e6", D: "#3a5a7a" } },
+  iceblock: { rows: [".II.", "IiII", "IIiI"], colors: { I: "#d6ecfa", i: "#9cc8e6" } }
 };
 const DECOR_UNIT = 0.012;          // how big one decoration pixel is, compared to the planet
 
-const THEMES = {
-  meadow: { ground: GRASS, flowers: FLOWERS, trail: "dirt" },
-  ireland: {
-    ground: pal(["#1d5422", "#28712c", "#36903a", "#4fad48", "#7ccb66"]), flowers: FLOWERS, trail: "stone",
-    landmarks: ["castle", "stonehenge"],
-    decor: [["sheep", 8], ["bush", 12], ["rock", 8]]
-  },
-  forest: {
-    ground: pal(["#143a1a", "#1c4f23", "#25662d", "#307d38", "#43964a"]), flowers: pal(["#e8e0c8", "#d23a2f"]), trail: "forest",
-    decor: [["pine", 34], ["tree", 18, { L: "#2d6b2f", l: "#3f8a3c" }], ["rock", 8], ["bush", 10]]
-  },
-  night: {
-    ground: pal(["#0d0e2a", "#14163a", "#1c1f4d", "#262a63", "#323779"]),
-    flowers: pal(["#ff5fd2", "#5ff2ff", "#fff27a"]), flowerRate: 0.02, trail: "neon",
-    landmarks: ["stage"],
-    decor: [["lamp", 12], ["graffiti", 3]]
-  },
-  // the USA is made of several biomes, each based on the photos
-  usa: {
-    trail: "road",
-    biomes: [
-      { name: "red-rock canyon", ground: pal(["#7a331b", "#9c4424", "#b75a30", "#cf7444", "#e09363"]), flowers: [],
-        decor: [["butte", 4], ["rock", 7, { R: "#a5532e", r: "#7e3a1f" }], ["tree", 6, { L: "#8fc04a", l: "#b5dc6a" }]] },
-      { name: "sagebrush desert", ground: pal(["#5d5a3c", "#76704a", "#8f8659", "#a89c69", "#c1b27c"]), flowers: pal(["#d9c27a"]),
-        decor: [["sage", 18], ["cactus", 6]] },
-      { name: "beach", ground: pal(["#c2ad83", "#d2bd93", "#dfcca6", "#ebdcb8", "#f5ead0"]), flowers: [], water: 0.34,
-        decor: [["drift", 5], ["rock", 3]] },
-      { name: "mountain lake", ground: pal(["#2a5636", "#376a42", "#457f4e", "#56955c", "#6caa6c"]), flowers: FLOWERS, water: 0.22,
-        decor: [["pine", 18], ["mountain", 2]] },
-      { name: "oak hills", ground: pal(["#8a6a2c", "#a5803a", "#bf9848", "#d4ae5c", "#e3c374"]), flowers: [],
-        decor: [["tree", 9], ["bush", 6, { B: "#6f7a3a", b: "#5a6430" }], ["graffiti", 1]] }
-    ]
-  }
+// ---------- biomes ----------
+// A planet is made of one or more biomes (big regions with their own ground and decorations).
+// Decoration counts are for a planet that is all that one biome; they shrink with the biome's share.
+// "water" puts a lake in the middle of the region (its size compared to the region); "ocean" makes it all sea.
+const BIOMES = {
+  plains:      { label: "Plains", ground: GRASS, flowers: FLOWERS,
+                 decor: [["bush", 20], ["rock", 10], ["sheep", 6], ["tree", 6]] },
+  forest:      { label: "Forest", ground: pal(["#143a1a", "#1c4f23", "#25662d", "#307d38", "#43964a"]), flowers: pal(["#e8e0c8", "#d23a2f"]),
+                 decor: [["pine", 60], ["tree", 25, { L: "#2d6b2f", l: "#3f8a3c" }], ["rock", 8], ["bush", 10]] },
+  autumn:      { label: "Autumn woods", ground: pal(["#5a2e14", "#7a3f19", "#9a5420", "#b86d2c", "#d38d45"]), flowers: pal(["#f2d14b", "#d23a2f"]),
+                 decor: [["tree", 40, { L: "#d9822b", l: "#f0a845" }], ["tree", 18, { L: "#b8401f", l: "#d9622e" }], ["pine", 10], ["rock", 8]] },
+  countryside: { label: "Irish countryside", ground: pal(["#1d5422", "#28712c", "#36903a", "#4fad48", "#7ccb66"]), flowers: FLOWERS,
+                 decor: [["castle", 1], ["stonehenge", 1], ["sheep", 14], ["bush", 20], ["rock", 12]] },
+  desert:      { label: "Desert", ground: pal(["#5d5a3c", "#76704a", "#8f8659", "#a89c69", "#c1b27c"]), flowers: pal(["#d9c27a"]),
+                 decor: [["sage", 60], ["cactus", 20]] },
+  canyon:      { label: "Red-rock canyon", ground: pal(["#7a331b", "#9c4424", "#b75a30", "#cf7444", "#e09363"]), flowers: [],
+                 decor: [["butte", 6], ["rock", 20, { R: "#a5532e", r: "#7e3a1f" }], ["tree", 10, { L: "#8fc04a", l: "#b5dc6a" }]] },
+  mountain:    { label: "Mountains", ground: pal(["#2a5636", "#376a42", "#457f4e", "#56955c", "#6caa6c"]), flowers: FLOWERS, water: 0.3,
+                 decor: [["mountain", 6], ["pine", 40]] },
+  beach:       { label: "Beach", ground: pal(["#c2ad83", "#d2bd93", "#dfcca6", "#ebdcb8", "#f5ead0"]), flowers: [], water: 0.5,
+                 decor: [["palm", 14], ["drift", 12], ["rock", 6]] },
+  ocean:       { label: "Ocean", ground: pal(["#c2ad83", "#d2bd93", "#dfcca6", "#ebdcb8", "#f5ead0"]), flowers: [], ocean: true, decor: [] },
+  tundra:      { label: "Tundra", ground: pal(["#4a5546", "#5d6a57", "#73806a", "#8e9a83", "#aab3a0"]), flowers: pal(["#f4f4f4", "#c9a6d8"]), flowerRate: 0.012,
+                 decor: [["rock", 22], ["snowpine", 16], ["bush", 10, { B: "#6b6a3e", b: "#55542f" }]] },
+  icy:         { label: "Icy", ground: pal(["#8db0cc", "#a7c6dd", "#c1daeb", "#dbeaf5", "#f1f7fc"]), flowers: pal(["#ffffff"]), flowerRate: 0.02,
+                 decor: [["iceblock", 24], ["igloo", 4], ["snowpine", 6]] },
+  neon:        { label: "Neon city", ground: pal(["#0d0e2a", "#14163a", "#1c1f4d", "#262a63", "#323779"]),
+                 flowers: pal(["#ff5fd2", "#5ff2ff", "#fff27a"]), flowerRate: 0.02,
+                 decor: [["stage", 1], ["lamp", 25], ["graffiti", 6]] }
 };
+const DECOR_AMOUNTS = [0, 0.45, 1, 1.7];          // decorations setting: none, few, normal, lots
+const MAX_BIOMES = 6;
+
+// ---------- a planet's look, from its saved description ----------
+function themeFromData(data) {
+  let list = (Array.isArray(data.biomes) ? data.biomes : []).filter(b => b && BIOMES[b.type]).slice(0, MAX_BIOMES)
+    .map(b => ({ type: b.type, size: Math.max(1, Math.min(5, Math.round(b.size) || 1)) }));
+  if (!list.length) list = [{ type: "plains", size: 1 }];
+  const total = list.reduce((t, b) => t + b.size, 0);
+  const amount = DECOR_AMOUNTS[data.decorations] ?? 1;
+  return {
+    trail: TRAIL_STYLES[data.trail] ? data.trail : "dirt",
+    biomes: list.map(b => {
+      const def = BIOMES[b.type], share = b.size / total;
+      // a bigger biome gets more decorations; landmarks (castle, stage...) always get their one
+      const decor = def.decor.map(([n, count, colors]) =>
+        [n, amount ? (DECOR[n].big && count <= 2 ? count : Math.round(count * share * amount)) : 0, colors]);
+      return Object.assign({}, def, { type: b.type, share, decor });
+    })
+  };
+}
 
 // ---------- biomes: big regions of a planet, each with its own ground ----------
 function setupBiomes(world) {
@@ -391,19 +413,33 @@ function setupBiomes(world) {
   if (!th.biomes) return;
   const rand = seeded(2024 + world.seed * 53);
   const twist = mulMM(axisAngle(norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), rand() * 6.28), axisAngle([0, 1, 0], rand() * 6.28));
-  const dirs = [[0, 0.15, 1], [1, 0.05, -0.25], [-0.95, 0.3, -0.3], [0.1, -1, 0.05], [-0.1, 1, -0.3]];
-  world.biomes = th.biomes.map((b, i) => ({
-    def: b, c: norm(mulMV(twist, norm(dirs[i % dirs.length]))),
-    nd: norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), nf: 5 + rand() * 5, np: rand() * 6.28
-  }));
-  // beaches get an ocean and the mountain biome a lake, in the middle of their region
+  const n = th.biomes.length;
+  world.biomes = th.biomes.map((b, i) => {
+    // spread the centres evenly over the ball (a "Fibonacci sphere"), then turn them to a random angle
+    const y = n === 1 ? 0 : 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), a = i * 2.39996;
+    return { def: b, c: norm(mulMV(twist, [r * Math.cos(a), y, r * Math.sin(a)])), bias: 0,
+             nd: norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]), nf: 5 + rand() * 5, np: rand() * 6.28 };
+  });
+  // grow or shrink each region until it covers its share of the planet (checked at random sample spots)
+  if (n > 1) {
+    const samples = [];
+    for (let i = 0; i < 1500; i++) samples.push(norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]));
+    for (let it = 0; it < 25; it++) {
+      const count = new Array(n).fill(0);
+      for (const q of samples) count[biomeAt(world, q)[0]]++;
+      world.biomes.forEach((B, i) => { B.bias += 0.9 * (B.def.share - count[i] / samples.length); });
+    }
+  }
+  // beaches and mountains get a lake in the middle of their region
   world.lakes = world.lakes || [];
   world.biomes.forEach(B => {
     if (!B.def.water) return;
     const c = B.c, t1 = norm(cross(c, Math.abs(c[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), t2 = cross(c, t1);
-    world.lakes.push({ c, t1, t2, r: B.def.water,
+    const regionAngle = Math.acos(1 - 2 * B.def.share);      // a round region of that share would be this wide
+    world.lakes.push({ c, t1, t2, r: B.def.water * regionAngle,
       waves: [[2 + Math.floor(rand() * 2), rand() * 6.28, 0.14], [5 + Math.floor(rand() * 3), rand() * 6.28, 0.06]] });
   });
+  world.hasOcean = world.biomes.some(B => B.def.ocean);
 }
 // which biome a spot is in (with wiggly borders); also returns the runner-up and how close the call was
 function biomeAt(world, p) {
@@ -411,11 +447,21 @@ function biomeAt(world, p) {
   const B = world.biomes;
   for (let i = 0; i < B.length; i++) {
     const b = B[i];
-    const v = b.c[0] * p[0] + b.c[1] * p[1] + b.c[2] * p[2] +
+    const v = b.c[0] * p[0] + b.c[1] * p[1] + b.c[2] * p[2] + b.bias +
               0.08 * Math.sin((b.nd[0] * p[0] + b.nd[1] * p[1] + b.nd[2] * p[2]) * b.nf + b.np);
     if (v > v1) { v2 = v1; b2 = b1; v1 = v; b1 = i; } else if (v > v2) { v2 = v; b2 = i; }
   }
   return [b1, b2, v1 - v2];
+}
+// how far into water a spot is (lakes and oceans): above 0 = water, around 0 = the shore, below 0 = dry land
+function waterDepth(world, p) {
+  let d = lakeDepth(world, p);
+  if (world.hasOcean) {
+    const [b1, b2, gap] = biomeAt(world, p), B = world.biomes;
+    if (B[b1].def.ocean) d = Math.max(d, (gap - 0.035) / 0.12);              // sea, deeper away from the coast
+    else if (B.length > 1 && B[b2].def.ocean) d = Math.max(d, -gap / 0.25);  // land near the coast: sandy shore
+  }
+  return d;
 }
 
 // ---------- placing decorations in the open spaces ----------
@@ -425,7 +471,7 @@ function buildDecor(world) {
   const fits = (q, room) => {
     if (world.trailPts.length && trailCloseness(world, q) > Math.cos(PATH_WIDTH * 1.2 + room)) return false;
     if (photoPts.some(p => dot(p, q) > Math.cos(PHOTO_SIZE * 0.95 + room))) return false;
-    if (lakeDepth(world, q) > -0.1) return false;
+    if (waterDepth(world, q) > -0.1) return false;
     if (out.some(o => dot(o.p, q) > Math.cos(o.room + room))) return false;
     return true;
   };
@@ -442,32 +488,12 @@ function buildDecor(world) {
       return;
     }
   };
-  (th.landmarks || []).forEach(n => put(n, null, null, 4000));
-  (th.decor || []).forEach(([n, count, colors]) => { for (let i = 0; i < count; i++) put(n, colors, null, 300); });
   (th.biomes || []).forEach((b, bi) => (b.decor || []).forEach(([n, count, colors]) => {
-    for (let i = 0; i < count; i++) put(n, colors, bi, DECOR[n].big ? 4000 : 500);   // big ones need more tries to find room
+    for (let i = 0; i < count; i++) put(n, colors, bi, DECOR[n].big ? 3000 : 400);   // big ones need more tries to find room
   }));
   world.decor = out;
 }
 
-// ---------- a planet's look, from its saved description ----------
-// The description picks a theme to start from, and can then swap out any part of it:
-// ground (5 colours, dark to light), flowers, trail style, landmarks and decorations.
-const isHex = c => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
-const okDecor = list => (Array.isArray(list) ? list : []).filter(d => Array.isArray(d) && DECOR[d[0]])
-  .map(([name, count, colors]) => [name, Math.max(0, Math.min(60, Math.round(count) || 0)), colors]);
-function themeFromData(data) {
-  const th = Object.assign({}, THEMES[data.theme] || THEMES.meadow);
-  if (Array.isArray(data.ground) && data.ground.length === 5 && data.ground.every(isHex)) {
-    th.ground = pal(data.ground);
-    delete th.biomes;                    // your own ground colours cover the whole planet
-  }
-  if (Array.isArray(data.flowers) && data.flowers.every(isHex)) th.flowers = pal(data.flowers);
-  if (TRAIL_STYLES[data.trail]) th.trail = data.trail;
-  if (Array.isArray(data.landmarks)) th.landmarks = data.landmarks.filter(n => DECOR[n]);
-  if (Array.isArray(data.decor)) th.decor = okDecor(data.decor);
-  return th;
-}
 // each planet gets its own fixed random layout from its owner's id, so it looks the same whoever visits
 function seedOf(id) {
   let h = 7;
@@ -475,10 +501,21 @@ function seedOf(id) {
   return (h >>> 0) % 10007;
 }
 
-const worlds = planets.map((data, idx) => {
+// ---------- making a planet (and remaking it when its owner changes it) ----------
+function fillWorld(world) {
+  world.theme = themeFromData(world.data);
+  world.tiles = []; world.lakes = null; world.biomes = null; world.hasOcean = false;
+  world.offstage = undefined; world.grassKey = null;
+  buildTiles(world, buildLayout(world, world.data.photos.length));
+  setupBiomes(world);
+  buildDecor(world);
+  world.glow.style.setProperty("--glow", world.data.color || "#ccc");
+  world.label.textContent = world.idx === 0 ? "Home" : world.data.owner;
+  world.dirty = world.pathsDirty = true;
+}
+function makeWorld(data, idx) {
   const glow = document.createElement("div");
   glow.className = "glow";
-  glow.style.setProperty("--glow", data.color || "#ccc");
   stage.appendChild(glow);
 
   const canvas = document.createElement("canvas");
@@ -487,7 +524,6 @@ const worlds = planets.map((data, idx) => {
 
   const label = document.createElement("button");
   label.className = "planet-label";
-  label.textContent = idx === 0 ? "Home" : data.owner;
   label.addEventListener("click", () => goToPlanet(idx));
   stage.appendChild(label);
 
@@ -498,43 +534,33 @@ const worlds = planets.map((data, idx) => {
     pathAlpha: 1, pathsDirty: true,
     dirty: true
   };
-  world.theme = themeFromData(data);
-  if (data.open) buildOpenWorld(world);
-  else buildTiles(world, buildLayout(world, data.photos.length));
-  setupBiomes(world);
-  buildDecor(world);
-  // start each planet with a trail (or dry land) under the character
-  const c = mulMV(world.rot, world.startPoint);
-  const ax = cross(c, [0, 0, 1]), l = Math.hypot(ax[0], ax[1], ax[2]);
-  if (l > 1e-6) world.rot = mulMM(axisAngle([ax[0] / l, ax[1] / l, ax[2] / l], Math.atan2(l, c[2])), world.rot);
+  fillWorld(world);
+  // start each planet with a trail under the character
+  bringToFront(world, world.startPoint);
   return world;
-});
-
-// ---------- open world: grass and lakes, no trails ----------
-function buildOpenWorld(world) {
-  const rand = seeded(555 + world.seed * 17);
-  world.paths = []; world.spurs = [];
-  world.trailPts = new Float32Array(0);
-  world.lakes = [];
-  for (let i = 0; i < (world.data.lakes || 0); i++) {
-    const c = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
-    const t1 = norm(cross(c, Math.abs(c[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), t2 = cross(c, t1);
-    world.lakes.push({ c, t1, t2, r: 0.2 + rand() * 0.22,
-      waves: [[2 + Math.floor(rand() * 2), rand() * 6.28, 0.16], [5 + Math.floor(rand() * 3), rand() * 6.28, 0.07]] });
-  }
-  // start on dry land, but near a lake shore so you can see the water
-  let start = [0, 0, 1];
-  for (let i = 0; i < 400; i++) {
-    const q = norm([rand() - 0.5, rand() - 0.5, rand() - 0.5]);
-    const lk = lakeDepth(world, q);
-    if (lk < -0.35 && lk > -0.7) { start = q; break; }
-  }
-  world.startPoint = start;
 }
+// the owner changed their planet: rebuild it in place, keeping where you're standing
+function rebuildWorld(world, data) {
+  cancelHover();
+  closeMagnifier();
+  for (const t of world.tiles) {
+    t.el.remove();
+    const k = pixelTiles.indexOf(t);
+    if (k >= 0) pixelTiles.splice(k, 1);
+  }
+  world.data = data;
+  fillWorld(world);
+  planetLoads.delete(world);
+  if (world.idx === focused) loadPlanet(world);
+  setActive();
+  if (world.idx === focused) updateLabels();
+}
+const worlds = planets.map(makeWorld);
+
 // how far inside a lake a point is: above 0 = water, around 0 = the shore, below 0 = dry land
 function lakeDepth(world, p) {
   let best = -1;
-  if (!world.lakes) return best;
+  if (!world.lakes) return best;   // (oceans are handled by waterDepth)
   for (const L of world.lakes) {
     const d = L.c[0] * p[0] + L.c[1] * p[1] + L.c[2] * p[2];
     if (d < 0.5) continue;
@@ -787,8 +813,8 @@ function paintGround(world, d, W, H) {
       const pz = p[2] = m[0][2]*x + m[1][2]*y + m[2][2]*z;
       // round-ball shading, darker toward the edge
       const shade = 0.25 + 0.75 * Math.max(0, x * LIGHT[0] + y * LIGHT[1] + z * LIGHT[2]);
-      if (world.lakes) {
-        const lk = lakeDepth(world, p);
+      if (world.lakes && (world.lakes.length || world.hasOcean)) {
+        const lk = waterDepth(world, p);
         if (lk > -0.12) {
           let c;
           if (lk < 0) c = SAND[lk > -0.06 ? 1 : 0];             // sandy shore
@@ -1084,7 +1110,7 @@ function updateLabels() {
   setTimeout(() => {
     name.textContent = d.name;
     sub.textContent = (focused === 0 ? "Your planet" : d.owner + "'s planet") +
-      (d.photos.length || d.open ? (d.subtitle ? " \u00b7 " + d.subtitle : "") : " \u00b7 Photos coming soon");
+      (d.subtitle ? " \u00b7 " + d.subtitle : "") + (d.photos.length ? "" : " \u00b7 No photos yet");
     name.classList.remove("fading");
     sub.classList.remove("fading");
   }, transition ? TRANSITION_TIME * 0.5 : 0);
@@ -1400,7 +1426,7 @@ function trailCloseness(world, p) {
 function tryMove(world, dir, dist) {
   const flying = settings.character === "ptero";
   const free = flying || world.data.open || TRAIL_LOOSENESS >= 50;   // no need to stay on the trails
-  const water = !flying && world.lakes;                  // ...but sheep and cars can't swim
+  const water = !flying && world.lakes && (world.lakes.length || world.hasOcean);                  // ...but sheep and cars can't swim
   // where a road crosses water it works as a bridge
   const onBridge = q => world.trailPts.length && trailCloseness(world, q) > Math.cos(PATH_WIDTH * 0.75);
   const now = free ? 1 : trailCloseness(world, world.rot[2]);
@@ -1408,7 +1434,8 @@ function tryMove(world, dir, dist) {
   for (const off of tries) {
     const a = dir + off;
     const R2 = mulMM(axisAngle([-Math.cos(a), -Math.sin(a), 0], dist * Math.cos(off)), world.rot);
-    if (water && lakeDepth(world, R2[2]) > -0.02 && !onBridge(R2[2])) continue;
+    // (if a change to the planet left you standing in water, you can still wade out toward the shore)
+    if (water && waterDepth(world, R2[2]) > Math.max(-0.02, waterDepth(world, world.rot[2]) - 0.001) && !onBridge(R2[2])) continue;
     if (!free) {
       const near = trailCloseness(world, R2[2]);
       if (near < TRAIL_SLACK && near <= now + 1e-7) continue;
@@ -1471,7 +1498,7 @@ let scene = null;
 function enterScene(tile) {
   cancelHover();
   closeMagnifier();
-  const src = sourceFor(tile.photo.file).img;
+  const src = sourceFor(tile.photo.thumb || tile.photo.file).img;   // same shape as the full photo
   const ratio = src.naturalWidth ? src.naturalWidth / src.naturalHeight : 1.5;
   const touch = matchMedia("(hover: none) and (pointer: coarse)").matches;
   const maxH = touch ? innerHeight - 330 : innerHeight * 0.76;      // leave room for the touch buttons
@@ -1792,35 +1819,261 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 
-// ================= Worlds: who you're playing as, and visiting friends =================
-const asSelect = document.getElementById("playingAs");
-asSelect.innerHTML = users.map(u => `<option value="${u.id}">${u.name}</option>`).join("");
+// ================= Worlds: playing as, friends, photos, customizing =================
+const $ = id => document.getElementById(id);
+const isHex = c => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c);
+
+// "Playing as": switching starts the page again from that person's own planet
+const asSelect = $("playingAs");
+users.forEach(u => asSelect.add(new Option(u.name, u.id)));
 asSelect.value = me.id;
-// switching who you play as starts the page again from that person's own planet
 asSelect.addEventListener("change", () => { location.search = "?as=" + encodeURIComponent(asSelect.value); });
 
-const friendList = document.getElementById("friendList");
-const homeBtn = document.getElementById("goHome");
-if (!friends.length) friendList.innerHTML = '<span class="no-friends">No friends yet</span>';
-worlds.slice(1).forEach(w => {
-  const b = document.createElement("button");
-  b.className = "friend";
-  b.textContent = w.data.owner;
-  b.style.setProperty("--dot", w.data.color);
-  b.title = "Visit " + w.data.owner + "'s planet: " + w.data.name;
-  b.addEventListener("click", () => goToPlanet(w.idx));
-  w.friendBtn = b;
-  friendList.appendChild(b);
-});
+const homeBtn = $("goHome");
 homeBtn.addEventListener("click", () => goToPlanet(0));
-
 // the bar shows whose planet you're on; the address keeps it too (?as=...&visit=...), so a reload stays put
 function showVisiting() {
   homeBtn.hidden = focused === 0;
-  worlds.forEach(w => w.friendBtn && w.friendBtn.classList.toggle("here", w.idx === focused));
   const q = "?as=" + encodeURIComponent(me.id) + (focused ? "&visit=" + encodeURIComponent(worlds[focused].data.id) : "");
   if (location.search !== q) history.replaceState(null, "", location.pathname + q);
+  if (openPanelName === "friends") renderFriends();
 }
+
+// ---------- the side panel ----------
+const panel = $("panel");
+const PANEL_TITLES = { friends: "Friends", photos: "My photos", customize: "Customize my planet" };
+let openPanelName = null;
+function openPanel(name) {
+  if (openPanelName === name) return closePanel();
+  if (name !== "friends" && focused !== 0) goToPlanet(0);     // photos and customizing are for your own planet
+  openPanelName = name;
+  panel.hidden = false;
+  panel.querySelectorAll("[data-panel]").forEach(el => { el.hidden = el.dataset.panel !== name; });
+  $("panelTitle").textContent = PANEL_TITLES[name];
+  document.querySelectorAll(".tool").forEach(b => b.classList.toggle("on", b.dataset.open === name));
+  ({ friends: renderFriends, photos: renderPhotos, customize: renderCustomize })[name]();
+}
+function closePanel() {
+  openPanelName = null;
+  panel.hidden = true;
+  document.querySelectorAll(".tool").forEach(b => b.classList.remove("on"));
+}
+document.querySelectorAll(".tool").forEach(b => b.addEventListener("click", () => openPanel(b.dataset.open)));
+$("panelClose").addEventListener("click", closePanel);
+
+// ---------- friends ----------
+const allProfiles = await Promise.all(users.map(u => db.getUser(u.id)));
+$("myCode").textContent = me.code;
+$("copyCode").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(me.code); $("copyCode").textContent = "Copied!"; }
+  catch (e) { $("copyCode").textContent = "Select it to copy"; }
+  setTimeout(() => { $("copyCode").textContent = "Copy"; }, 1500);
+});
+function renderFriends() {
+  const fw = worlds.slice(1);
+  $("friendCount").textContent = fw.length;
+  const others = allProfiles.filter(u => u.id !== me.id && !fw.some(w => w.data.id === u.id));
+  $("demoCodes").textContent = others.length ? "Demo codes you can try: " + others.map(u => u.code).join(", ") : "";
+  const list = $("friendRows");
+  list.innerHTML = fw.length ? "" : '<p class="muted">No friends yet. Add one with their code.</p>';
+  fw.forEach(w => {
+    const row = document.createElement("div");
+    row.className = "friend-row" + (w.idx === focused ? " here" : "");
+    row.innerHTML = '<span class="dot"></span><div class="who"><b></b><small></small></div>' +
+                    '<button class="visit"></button><button class="remove" title="Remove friend">&times;</button>';
+    row.querySelector(".dot").style.background = w.data.color;
+    row.querySelector("b").textContent = w.data.owner;
+    row.querySelector("small").textContent = w.data.name + " · " + w.data.photos.length + " photos";
+    const visit = row.querySelector(".visit");
+    visit.textContent = w.idx === focused ? "You're here" : "Visit";
+    visit.disabled = w.idx === focused;
+    visit.addEventListener("click", () => goToPlanet(w.idx));
+    row.querySelector(".remove").addEventListener("click", async () => {
+      if (!confirm("Remove " + w.data.owner + " from your friends?")) return;
+      await db.removeFriend(me.id, w.data.id);
+      location.search = "?as=" + encodeURIComponent(me.id);      // start again without them
+    });
+    list.appendChild(row);
+  });
+}
+$("addFriend").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = $("addFriendMsg");
+  try {
+    const f = await db.addFriend(me.id, $("friendCode").value);
+    // their planet joins the small planets on the side
+    const w = makeWorld(toPlanet(f, await db.getPlanet(f.id)), worlds.length);
+    worlds.push(w);
+    layout();
+    setActive();
+    $("friendCode").value = "";
+    msg.className = "msg ok";
+    msg.textContent = f.name + " is now your friend! Their planet is on the side.";
+    renderFriends();
+  } catch (err) {
+    msg.className = "msg bad";
+    msg.textContent = err.message;
+  }
+});
+
+// ---------- my photos ----------
+async function refreshMyPlanet() {
+  rebuildWorld(worlds[0], toPlanet(me, await db.getPlanet(me.id)));
+}
+function renderPhotos() {
+  const photos = worlds[0].data.photos, grid = $("photoGrid");
+  $("photoCount").textContent = photos.length;
+  grid.innerHTML = photos.length ? "" : '<p class="muted">No photos yet.</p>';
+  photos.forEach(ph => {
+    const cell = document.createElement("div");
+    cell.className = "photo-cell";
+    const img = new Image();
+    img.src = ph.thumb || ph.file;
+    img.alt = ph.caption || "";
+    img.title = ph.caption || "";
+    const del = document.createElement("button");
+    del.innerHTML = "&times;";
+    del.title = "Delete this photo";
+    del.addEventListener("click", async () => {
+      if (!confirm("Delete this photo from your planet?")) return;
+      await db.deletePhoto(me.id, ph.id);
+      await refreshMyPlanet();
+      renderPhotos();
+    });
+    cell.append(img, del);
+    grid.appendChild(cell);
+  });
+}
+$("photoInput").addEventListener("change", async e => {
+  const files = [...e.target.files], msg = $("photoMsg"), problems = [];
+  e.target.value = "";
+  msg.className = "msg";
+  for (let i = 0; i < files.length; i++) {
+    msg.textContent = "Adding photo " + (i + 1) + " of " + files.length + "…";
+    try { await db.addPhoto(me.id, files[i]); } catch (err) { problems.push(err.message); }
+  }
+  await refreshMyPlanet();
+  renderPhotos();
+  msg.className = "msg " + (problems.length ? "bad" : "ok");
+  msg.textContent = problems.length ? problems.join(" ") : "Added " + files.length + (files.length === 1 ? " photo." : " photos.");
+});
+
+// ---------- customize my planet (changes show live on the planet, and save automatically) ----------
+const TRAIL_LABELS = { dirt: "Dirt path", forest: "Forest path", stone: "Stone walls", road: "Road", neon: "Neon" };
+const SIZE_NAMES = ["", "Small", "Medium", "Large", "Very large", "Huge"];
+const DECOR_NAMES = ["None", "A few", "Normal", "Lots"];
+Object.keys(TRAIL_STYLES).forEach(k => $("cTrail").add(new Option(TRAIL_LABELS[k] || k, k)));
+let draft = null, saveTimer = null;
+function renderCustomize() {
+  const d = worlds[0].data;
+  draft = { name: d.name, subtitle: d.subtitle, glow: isHex(d.color) ? d.color : "#cccccc",
+            trail: themeFromData(d).trail, decorations: d.decorations ?? 2,
+            biomes: (Array.isArray(d.biomes) ? d.biomes : []).filter(b => BIOMES[b.type]).map(b => ({ type: b.type, size: b.size || 1 })) };
+  if (!draft.biomes.length) draft.biomes = [{ type: "plains", size: 1 }];
+  $("cName").value = draft.name;
+  $("cSub").value = draft.subtitle;
+  $("cGlow").value = draft.glow;
+  $("cTrail").value = draft.trail;
+  $("cDecor").value = draft.decorations;
+  $("cDecorName").textContent = DECOR_NAMES[draft.decorations];
+  $("cStatus").textContent = "";
+  renderBiomes();
+}
+const swatch = type => {
+  if (BIOMES[type].ocean) return "rgb(44,104,184)";
+  const c = BIOMES[type].ground[2];
+  return "rgb(" + c.join(",") + ")";
+};
+function renderBiomes() {
+  const box = $("biomeRows");
+  box.innerHTML = "";
+  draft.biomes.forEach((b, i) => {
+    const row = document.createElement("div");
+    row.className = "biome-row";
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = swatch(b.type);
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", "Biome type");
+    Object.keys(BIOMES).forEach(k => sel.add(new Option(BIOMES[k].label, k)));
+    sel.value = b.type;
+    sel.addEventListener("change", () => { b.type = sel.value; renderBiomes(); changed(true); });
+    const size = document.createElement("input");
+    Object.assign(size, { type: "range", min: 1, max: 5, step: 1, value: b.size });
+    size.setAttribute("aria-label", "Biome size");
+    const info = document.createElement("small");
+    info.className = "biome-info";
+    // (only the labels update while dragging, so the slider isn't swapped out from under the mouse)
+    size.addEventListener("input", () => { b.size = +size.value; showBiomeSizes(); changed(true); });
+    const del = document.createElement("button");
+    del.innerHTML = "&times;";
+    del.title = "Remove this biome";
+    del.disabled = draft.biomes.length < 2;
+    del.addEventListener("click", () => { draft.biomes.splice(i, 1); renderBiomes(); changed(true); });
+    const top = document.createElement("div");
+    top.className = "biome-top";
+    top.append(sw, sel, del);
+    const bottom = document.createElement("div");
+    bottom.className = "biome-size";
+    bottom.append(size, info);
+    row.append(top, bottom);
+    box.appendChild(row);
+  });
+  $("addBiome").disabled = draft.biomes.length >= MAX_BIOMES;
+  showBiomeSizes();
+}
+function showBiomeSizes() {
+  const total = draft.biomes.reduce((t, b) => t + b.size, 0);
+  $("biomeRows").querySelectorAll(".biome-info").forEach((el, i) => {
+    const b = draft.biomes[i];
+    el.textContent = SIZE_NAMES[b.size] + " · " + Math.round(b.size / total * 100) + "% of the planet";
+  });
+}
+$("addBiome").addEventListener("click", () => {
+  const unused = Object.keys(BIOMES).find(k => !draft.biomes.some(b => b.type === k)) || "plains";
+  draft.biomes.push({ type: unused, size: 2 });
+  renderBiomes();
+  changed(true);
+});
+$("cName").addEventListener("input", e => { draft.name = e.target.value; changed(false); });
+$("cSub").addEventListener("input", e => { draft.subtitle = e.target.value; changed(false); });
+$("cGlow").addEventListener("input", e => { draft.glow = e.target.value; changed(false); });
+$("cTrail").addEventListener("change", e => { draft.trail = e.target.value; changed(true); });
+$("cDecor").addEventListener("input", e => {
+  draft.decorations = +e.target.value;
+  $("cDecorName").textContent = DECOR_NAMES[draft.decorations];
+  changed(true);
+});
+// save a moment after the last change, then rebuild the planet (or just relabel it, for names and colour)
+let needRebuild = false;
+function changed(rebuild) {
+  needRebuild = needRebuild || rebuild;
+  clearTimeout(saveTimer);
+  $("cStatus").className = "msg";
+  $("cStatus").textContent = "Saving…";
+  saveTimer = setTimeout(async () => {
+    const saved = { name: draft.name.trim(), subtitle: draft.subtitle.trim(), glow: draft.glow, trail: draft.trail,
+                    biomes: draft.biomes.map(b => ({ ...b })), decorations: draft.decorations };
+    await db.savePlanet(me.id, saved);
+    const data = Object.assign({}, worlds[0].data, {
+      name: saved.name || me.name + "'s planet", subtitle: saved.subtitle, color: saved.glow,
+      trail: saved.trail, biomes: saved.biomes, decorations: saved.decorations });
+    if (needRebuild) rebuildWorld(worlds[0], data);
+    else {
+      worlds[0].data = data;
+      worlds[0].glow.style.setProperty("--glow", data.color);
+      if (focused === 0) updateLabels();
+    }
+    needRebuild = false;
+    $("cStatus").className = "msg ok";
+    $("cStatus").textContent = "Saved";
+  }, 200);
+}
+$("resetDemo").addEventListener("click", async () => {
+  if (!confirm("Reset the whole demo? Every change, friend and uploaded photo in this browser will be forgotten.")) return;
+  await db.resetDemo();
+  location.href = location.pathname;
+});
 
 // opened with ?visit=friend: start on that friend's planet (no trip animation)
 const startAt = worlds.findIndex(w => w.idx > 0 && w.data.id === params.get("visit"));

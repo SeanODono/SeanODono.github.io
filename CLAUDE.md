@@ -62,6 +62,13 @@ Each planet entry has `id, name, subtitle, color (glow), theme, photos[]`. Theme
 4. **Customize your planet:** theme, glow color, ground colors, trail style, which decorations and how many. Live preview while editing.
 5. **Customize your avatar:** sheep / car / pterodactyl plus color choices (recolor the existing pixel-art palettes).
 
+### What's built so far (Friends tab)
+- The site has two tabs: **Portfolio** (`index.html`, unchanged apart from a "Friends" menu link) and **Friends** (`worlds.html`). New work happens only in the Friends tab.
+- Files: `worlds.html`, `worlds/game.js` (game engine copied from index.html + the Friends UI), `worlds/worlds.css`, `worlds/data.js` (all data access), `worlds/users/*.json` (seed users: sean, maya, theo, juno, ava; `index.json` lists them).
+- A planet description is `{ name, subtitle, glow, trail, biomes: [{ type, size 1-5 }], decorations 0-3, photos }`. Biome types are in `BIOMES` in game.js (plains, forest, autumn, countryside, desert, canyon, mountain, beach, ocean, tundra, icy, neon); region sizes follow the size values.
+- Panels: Friends (friend code, add by code, list, visit, remove), My photos (add: resized to 1920x1080 + 480 px thumb; delete), Customize my planet (name, subtitle, glow, trails, biomes + sizes, decoration amount; live preview, auto-save), and Reset demo.
+- Demo storage: localStorage (`worlds-demo-state-v2`) for users/planets, IndexedDB (`worlds-demo`) for uploaded photos. Seeded from the JSON on first visit. Cloudflare replaces `data.js` later.
+
 ### Running it
 Serve the folder locally (opening the file directly can break IndexedDB/modules), e.g. `python3 -m http.server 8000`, then open http://localhost:8000/worlds.html. Tell Sean the exact command.
 

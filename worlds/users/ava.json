@@ -1,0 +1,25 @@
+{
+  "id": "ava",
+  "name": "Ava",
+  "code": "AVA-2R7X",
+  "avatar": {"character": "ptero"},
+  "friends": [],
+  "planet": {
+    "name": "Far North",
+    "subtitle": "Snow and sea",
+    "glow": "#9fd8ff",
+    "trail": "dirt",
+    "decorations": 2,
+    "biomes": [
+      {"type": "icy", "size": 2},
+      {"type": "tundra", "size": 2},
+      {"type": "ocean", "size": 2}
+    ],
+    "photos": [
+      "images/ireland3.jpg",
+      "images/ireland7.jpg",
+      "images/ireland12.jpg",
+      "images/wild2.jpg"
+    ]
+  }
+}

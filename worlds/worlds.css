@@ -460,44 +460,165 @@ footer {
   #switchChar { bottom: 2.2rem; }
 }
 
-/* ---------- Worlds: playing as / visiting friends ---------- */
+/* ---------- Worlds: the two tabs at the top ---------- */
+nav.tabs { gap: 0.4rem; }
+nav.tabs a {
+  text-decoration: none;
+  padding: 0.25rem 1rem;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+}
+nav.tabs a:hover { color: var(--text); }
+nav.tabs a.active { color: var(--text); border-bottom-color: var(--text); }
+
+/* ---------- Worlds: the bar under the title ---------- */
 .worlds-bar {
   flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.7rem;
+  gap: 0.4rem 0.6rem;
   margin-top: 0.3rem;
   font-family: system-ui, sans-serif;
   font-size: 0.75rem;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--muted);
   pointer-events: auto;          /* the title band ignores clicks, but these controls need them */
 }
-.worlds-bar select, .worlds-bar button {
+.worlds-bar select, .worlds-bar button, #panel button, #panel select, #panel input:not([type=range]):not([type=color]) {
   font: inherit;
   color: var(--text);
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 2px;
-  padding: 0.2rem 0.55rem;
+  padding: 0.25rem 0.6rem;
   cursor: pointer;
 }
-.worlds-bar select:hover, .worlds-bar button:hover { border-color: var(--accent); }
-#friendList { display: contents; }
-.friend::before {                /* a little dot in the planet's glow colour */
-  content: "";
-  display: inline-block;
-  width: 0.55rem; height: 0.55rem;
-  margin-right: 0.4rem;
-  border-radius: 50%;
-  background: var(--dot);
-}
-.friend.here { border-color: var(--text); font-weight: 600; }
+.worlds-bar select:hover, .worlds-bar button:hover, #panel button:hover:not(:disabled) { border-color: var(--accent); }
+.worlds-bar .tool.on { border-color: var(--text); background: var(--text); color: #fff; }
 #goHome { border-color: var(--accent); color: var(--accent); }
 #goHome[hidden] { display: none; }
-.no-friends { font-style: italic; }
+
+/* ---------- Worlds: side panel (a sheet at the bottom on phones) ---------- */
+#panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(360px, 92vw);
+  z-index: 450;                  /* above the menu, buttons and joystick */
+  background: #fff;
+  border-left: 1px solid #e2e2e2;
+  box-shadow: -10px 0 30px rgba(0,0,0,0.08);
+  overflow-y: auto;
+  padding: 0 1.1rem 1.5rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+}
+#panel[hidden], #panel [hidden] { display: none; }
+#panel header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.9rem 0 0.6rem;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  z-index: 1;
+}
+#panel h2 { font-family: Georgia, serif; font-weight: normal; font-size: 1.25rem; }
+#panel h3 {
+  margin: 1.2rem 0 0.45rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: normal;
+}
+#panelClose { font-size: 1.3rem !important; line-height: 1; border: none !important; }
+#panel .muted { color: var(--muted); font-size: 0.78rem; margin-top: 0.35rem; }
+#panel .msg { min-height: 1.2em; font-size: 0.8rem; margin-top: 0.35rem; color: var(--muted); }
+#panel .msg.ok { color: #2f7d3a; }
+#panel .msg.bad { color: #b3352b; }
+#panel .row { display: flex; gap: 0.5rem; align-items: flex-end; }
+#panel .row input { flex: 1; min-width: 0; }
+#panel .grow { flex: 1; }
+#panel .field { display: block; margin-top: 0.8rem; color: var(--muted); font-size: 0.78rem; }
+#panel .field input:not([type=range]):not([type=color]), #panel .field select { display: block; width: 100%; margin-top: 0.25rem; }
+#panel .field input[type=range] { display: block; width: 100%; margin-top: 0.3rem; }
+#panel input[type=color] { display: block; width: 3.2rem; height: 2rem; margin-top: 0.25rem; padding: 0; border: 1px solid #ddd; background: #fff; cursor: pointer; }
+#panel .wide { width: 100%; margin-top: 0.5rem; }
+#panel hr { border: none; border-top: 1px solid #eee; margin: 1.4rem 0 0.9rem; }
+#panel .danger { color: #b3352b; border-color: #e6b8b4; }
+
+.code-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed var(--accent);
+  background: #fbf7ef;
+}
+#myCode { font-family: ui-monospace, Menlo, monospace; font-size: 1.15rem; letter-spacing: 0.12em; user-select: all; }
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.friend-row .dot { width: 0.8rem; height: 0.8rem; border-radius: 50%; flex: none; }
+.friend-row .who { flex: 1; min-width: 0; }
+.friend-row .who b { display: block; font-weight: 600; }
+.friend-row .who small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend-row.here .visit { color: var(--muted); cursor: default; }
+.friend-row .remove { border: none !important; color: var(--muted) !important; font-size: 1.1rem; padding: 0 0.3rem !important; }
+
+.add-photos {
+  display: block;
+  margin-top: 1rem;
+  padding: 0.8rem;
+  text-align: center;
+  border: 1px dashed var(--accent);
+  background: #fbf7ef;
+  color: var(--accent);
+  cursor: pointer;
+}
+.add-photos:hover { background: #f6eedd; }
+#photoGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.photo-cell { position: relative; }
+.photo-cell img { display: block; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; background: var(--placeholder); }
+.photo-cell button {
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 1.5rem; height: 1.5rem;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background: rgba(0,0,0,0.6) !important;
+  color: #fff !important;
+  line-height: 1;
+}
+.photo-cell button:hover { background: #b3352b !important; }
+
+.biome-row { padding: 0.5rem 0; border-bottom: 1px solid #f0f0f0; }
+.biome-top { display: flex; align-items: center; gap: 0.5rem; }
+.biome-top select { flex: 1; min-width: 0; }
+.biome-top button { border: none !important; color: var(--muted) !important; font-size: 1.1rem; padding: 0 0.3rem !important; }
+.biome-top button:disabled { opacity: 0.3; cursor: default; }
+.swatch { width: 1.4rem; height: 1.4rem; flex: none; border: 1px solid rgba(0,0,0,0.2); }
+.biome-size { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.3rem; padding-left: 1.9rem; }
+.biome-size input { flex: 1; }
+.biome-size small { color: var(--muted); font-size: 0.72rem; white-space: nowrap; width: 9.5rem; }
+
 @media (max-width: 700px) {
-  .worlds-bar { font-size: 0.7rem; gap: 0.3rem 0.5rem; }
-  .friends-label { display: none; }
+  .worlds-bar { font-size: 0.7rem; gap: 0.3rem 0.4rem; }
+  #panel {
+    top: auto; left: 0; width: 100%;
+    max-height: 58vh;
+    border-left: none;
+    border-top: 1px solid #e2e2e2;
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.12);
+  }
 }
